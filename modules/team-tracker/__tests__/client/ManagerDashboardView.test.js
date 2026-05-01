@@ -216,6 +216,6 @@ describe('ManagerDashboardView', () => {
     const teamButton = wrapper.findAll('button').find(b => b.text().includes('Alpha'))
     await teamButton.trigger('click')
 
-    expect(navMock.navigateTo).toHaveBeenCalledWith('team-detail', { team: 'org1::Alpha' })
+    expect(navMock.navigateTo).toHaveBeenCalledWith('team-detail', { teamKey: 'org1::Alpha' })
   })
 })
