@@ -1207,8 +1207,10 @@ function handleLaunchTutorial() {
   launchTutorial({ onTabClick: (tabId) => { activeTab.value = tabId }, nav })
 }
 
+let initialLoadHandled = false
 watch(loading, (isLoading, wasLoading) => {
-  if (wasLoading && !isLoading && !error.value && !reason.value) {
+  if (!initialLoadHandled && wasLoading && !isLoading && !error.value && !reason.value) {
+    initialLoadHandled = true
     const opts = { onTabClick: (tabId) => { activeTab.value = tabId }, nav }
     if (nav?.params.value?.tutorial === '1') {
       launchTutorial(opts)
@@ -1216,7 +1218,7 @@ watch(loading, (isLoading, wasLoading) => {
       checkFirstVisit(opts)
     }
   }
-}, { once: true })
+})
 
 onMounted(() => {
   load()
