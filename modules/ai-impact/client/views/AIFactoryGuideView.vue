@@ -72,13 +72,13 @@ const phaseInfo = {
 
 // Color utility for phase accents
 const phaseColorMap = {
-  blue: { circle: 'bg-blue-500/20 border-blue-500', text: 'text-blue-400', tag: 'bg-blue-500/10 text-blue-400 border-blue-500/20', badge: 'bg-green-500/20 text-green-400', connector: 'from-blue-500 to-indigo-500' },
-  indigo: { circle: 'bg-indigo-500/20 border-indigo-500', text: 'text-indigo-400', tag: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20', badge: 'bg-green-500/20 text-green-400', connector: 'from-indigo-500 to-purple-500' },
-  purple: { circle: 'bg-purple-500/20 border-purple-500', text: 'text-purple-400', tag: 'bg-purple-500/10 text-purple-400 border-purple-500/20', badge: 'bg-gray-500/20 text-gray-400', connector: 'from-purple-500 to-cyan-500' },
-  cyan: { circle: 'bg-cyan-500/20 border-cyan-500', text: 'text-cyan-400', tag: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20', badge: 'bg-gray-500/20 text-gray-400', connector: 'from-cyan-500 to-amber-500' },
-  amber: { circle: 'bg-amber-500/20 border-amber-500', text: 'text-amber-400', tag: 'bg-amber-500/10 text-amber-400 border-amber-500/20', badge: 'bg-gray-500/20 text-gray-400', connector: 'from-amber-500 to-teal-500' },
-  teal: { circle: 'bg-teal-500/20 border-teal-500', text: 'text-teal-400', tag: 'bg-teal-500/10 text-teal-400 border-teal-500/20', badge: 'bg-gray-500/20 text-gray-400', connector: 'from-teal-500 to-rose-500' },
-  rose: { circle: 'bg-rose-500/20 border-rose-500', text: 'text-rose-400', tag: 'bg-rose-500/10 text-rose-400 border-rose-500/20', badge: 'bg-gray-500/20 text-gray-400', connector: '' },
+  blue: { circle: 'bg-blue-500/20 border-blue-500', text: 'text-blue-400', tag: 'bg-blue-500/10 text-blue-400 border-blue-500/20', connector: 'from-blue-500 to-indigo-500' },
+  indigo: { circle: 'bg-indigo-500/20 border-indigo-500', text: 'text-indigo-400', tag: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20', connector: 'from-indigo-500 to-purple-500' },
+  purple: { circle: 'bg-purple-500/20 border-purple-500', text: 'text-purple-400', tag: 'bg-purple-500/10 text-purple-400 border-purple-500/20', connector: 'from-purple-500 to-cyan-500' },
+  cyan: { circle: 'bg-cyan-500/20 border-cyan-500', text: 'text-cyan-400', tag: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20', connector: 'from-cyan-500 to-amber-500' },
+  amber: { circle: 'bg-amber-500/20 border-amber-500', text: 'text-amber-400', tag: 'bg-amber-500/10 text-amber-400 border-amber-500/20', connector: 'from-amber-500 to-teal-500' },
+  teal: { circle: 'bg-teal-500/20 border-teal-500', text: 'text-teal-400', tag: 'bg-teal-500/10 text-teal-400 border-teal-500/20', connector: 'from-teal-500 to-rose-500' },
+  rose: { circle: 'bg-rose-500/20 border-rose-500', text: 'text-rose-400', tag: 'bg-rose-500/10 text-rose-400 border-rose-500/20', connector: '' },
 }
 
 function getPhaseColors(phaseId) {
