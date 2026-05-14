@@ -73,6 +73,7 @@ const filteredIssues = computed(() => {
 })
 
 const completedIssues = computed(() => props.docData?.completedIssues || [])
+const cumulativeStats = computed(() => props.docData?.cumulativeStats || null)
 
 // ─── Graph A: Documentation Demand ───
 
@@ -190,6 +191,18 @@ const activityChartOptions = computed(() => ({
   }
 }))
 
+function jiraJqlUrl(jql) {
+  return `${jiraHost.value}/issues/?jql=${encodeURIComponent(jql)}`
+}
+
+const cumulativeJqls = computed(() => ({
+  stratsContributed: 'project = "RHAISTRAT" AND labels = "ai1st-doc-contributed"',
+  allContributed: 'project IN ("RHAISTRAT", "RHOAIENG") AND labels = "ai1st-doc-contributed"',
+  allInvoked: 'project IN ("RHAISTRAT", "RHOAIENG") AND labels = "ai1st-doc-invoked"',
+  allResolvedContributed: 'project IN ("RHAISTRAT", "RHOAIENG") AND status IN ("Resolved", "Closed") AND labels = "ai1st-doc-contributed"',
+  stratsResolvedContributed: 'project = "RHAISTRAT" AND status IN ("Resolved", "Closed") AND labels = "ai1st-doc-contributed"'
+}))
+
 function mrLabel(url) {
   if (!url) return ''
   const match = url.match(/merge_requests\/(\d+)/)
@@ -249,6 +262,32 @@ function mrLabel(url) {
       </div>
 
       <template v-else>
+        <!-- Cumulative KPIs -->
+        <div class="px-6 pt-6" v-if="cumulativeStats">
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-center">
+              <a :href="jiraJqlUrl(cumulativeJqls.stratsContributed)" target="_blank" rel="noopener" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400 hover:underline">{{ cumulativeStats.stratsContributed }}</a>
+              <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">RHAISTRATs with AI-First doc contributed</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-center">
+              <a :href="jiraJqlUrl(cumulativeJqls.allContributed)" target="_blank" rel="noopener" class="text-2xl font-bold text-indigo-600 dark:text-indigo-400 hover:underline">{{ cumulativeStats.allContributed }}</a>
+              <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Total Jiras with AI-First doc contributed</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-center">
+              <a :href="jiraJqlUrl(cumulativeJqls.allInvoked)" target="_blank" rel="noopener" class="text-2xl font-bold text-blue-600 dark:text-blue-400 hover:underline">{{ cumulativeStats.allInvoked }}</a>
+              <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Total Jiras with AI-First doc invoked</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-center">
+              <a :href="jiraJqlUrl(cumulativeJqls.allResolvedContributed)" target="_blank" rel="noopener" class="text-2xl font-bold text-green-600 dark:text-green-400 hover:underline">{{ cumulativeStats.allResolvedContributed }}</a>
+              <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">Resolved/Closed with AI-First doc contributed</div>
+            </div>
+            <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 text-center">
+              <a :href="jiraJqlUrl(cumulativeJqls.stratsResolvedContributed)" target="_blank" rel="noopener" class="text-2xl font-bold text-green-600 dark:text-green-400 hover:underline">{{ cumulativeStats.stratsResolvedContributed }}</a>
+              <div class="text-[11px] text-gray-500 dark:text-gray-400 mt-1">RHAISTRATs Resolved/Closed with AI-First doc contributed</div>
+            </div>
+          </div>
+        </div>
+
         <!-- Top Row — KPI Graphs -->
         <div class="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
           <!-- Graph A: Documentation Demand -->

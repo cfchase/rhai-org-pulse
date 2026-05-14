@@ -307,6 +307,42 @@ async function fetchDocActivityEvents(jiraRequest, config) {
   return events;
 }
 
+async function fetchDocCumulativeStats(jiraRequest, config) {
+  const { docContributedLabel, docInvokedLabel } = config;
+
+  validateJqlSafeString(docContributedLabel, 'docContributedLabel');
+  validateJqlSafeString(docInvokedLabel, 'docInvokedLabel');
+
+  const fields = 'key';
+
+  async function count(jql) {
+    const issues = await fetchAllJqlResults(jiraRequest, jql, fields);
+    return issues.length;
+  }
+
+  const [
+    stratsContributed,
+    allContributed,
+    allInvoked,
+    allResolvedContributed,
+    stratsResolvedContributed
+  ] = await Promise.all([
+    count(`project = "RHAISTRAT" AND labels = "${docContributedLabel}"`),
+    count(`project IN ("RHAISTRAT", "RHOAIENG") AND labels = "${docContributedLabel}"`),
+    count(`project IN ("RHAISTRAT", "RHOAIENG") AND labels = "${docInvokedLabel}"`),
+    count(`project IN ("RHAISTRAT", "RHOAIENG") AND status IN ("Resolved", "Closed") AND labels = "${docContributedLabel}"`),
+    count(`project = "RHAISTRAT" AND status IN ("Resolved", "Closed") AND labels = "${docContributedLabel}"`)
+  ]);
+
+  return {
+    stratsContributed,
+    allContributed,
+    allInvoked,
+    allResolvedContributed,
+    stratsResolvedContributed
+  };
+}
+
 async function fetchDocCompletedData(jiraRequest, config) {
   const { docProject, docContributedLabel } = config;
 
@@ -329,6 +365,7 @@ async function fetchDocCompletedData(jiraRequest, config) {
 module.exports = {
   fetchDocData,
   fetchDocActivityEvents,
+  fetchDocCumulativeStats,
   fetchDocCompletedData,
   processIssue,
   extractLabelAdditionEvents,

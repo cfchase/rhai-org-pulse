@@ -12,7 +12,7 @@ module.exports = function registerRoutes(router, context) {
   const { getConfig, saveConfig } = require('./config');
   const { computeAllMetrics } = require('./metrics');
   const { fetchAutofixData, computeAutofixMetrics, buildTrendData: buildAutofixTrend } = require('./jira/autofix-fetcher');
-  const { fetchDocData, fetchDocActivityEvents, fetchDocCompletedData, computeDocMetrics, buildDocTrendData } = require('./jira/doc-fetcher');
+  const { fetchDocData, fetchDocActivityEvents, fetchDocCumulativeStats, fetchDocCompletedData, computeDocMetrics, buildDocTrendData } = require('./jira/doc-fetcher');
 
   // Assessment routes (Phase 1: Storage + Ingest API)
   const registerAssessmentRoutes = require('./assessments/routes');
@@ -153,7 +153,8 @@ module.exports = function registerRoutes(router, context) {
       metrics,
       trendData,
       issues: data.issues,
-      completedIssues: data.completedIssues || []
+      completedIssues: data.completedIssues || [],
+      cumulativeStats: data.cumulativeStats || null
     });
   });
 
@@ -232,12 +233,19 @@ module.exports = function registerRoutes(router, context) {
         } catch (actErr) {
           console.error('[ai-impact] Documentation activity events fetch failed:', actErr.message);
         }
+        let cumulativeStats = null;
+        try {
+          cumulativeStats = await fetchDocCumulativeStats(jiraRequest, config);
+        } catch (statsErr) {
+          console.error('[ai-impact] Documentation cumulative stats fetch failed:', statsErr.message);
+        }
         writeToStorage('ai-impact/doc-data.json', {
           fetchedAt: new Date().toISOString(),
           issues: docResult.issues,
           labelEvents: docResult.labelEvents,
           activityEvents,
-          completedIssues
+          completedIssues,
+          cumulativeStats
         });
         docCount = docResult.issues.length;
       } catch (docErr) {
