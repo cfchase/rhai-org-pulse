@@ -1,13 +1,18 @@
 <script setup>
 import { onMounted, inject, computed } from 'vue'
 import { useFeatureDetail } from '../composables/useFeatureTraffic'
+import { useAIReview } from '../composables/useAIReview.js'
+import { useModuleLink } from '@shared/client/composables/useModuleLink.js'
 import StatusBadge from '../components/StatusBadge.vue'
 import TrafficMap from '../components/TrafficMap.vue'
 import EpicBreakdown from '../components/EpicBreakdown.vue'
 import SignoffSection from '../components/SignoffSection.vue'
+import AIReviewSection from '../components/AIReviewSection.vue'
 
 const nav = inject('moduleNav')
 const { feature, loading, error, loadFeature } = useFeatureDetail()
+const { aiReview, rfeAssessment, aiReviewLoading, aiReviewError, loadAIReview } = useAIReview()
+const { navigateTo: crossNavigate } = useModuleLink()
 
 const JIRA_BASE = 'https://redhat.atlassian.net/browse/'
 
@@ -101,8 +106,17 @@ const hasDeliveryInsight = computed(() => {
   return Array.isArray(t.stages) && t.stages.length > 0
 })
 
+const fromRfe = computed(() => nav.params.value.fromRfe)
+const fromFeatureReview = computed(() => nav.params.value.fromFeatureReview)
+
 function goBack() {
-  nav.navigateTo('overview')
+  if (fromRfe.value) {
+    crossNavigate('ai-impact', 'rfe-review', { select: fromRfe.value })
+  } else if (fromFeatureReview.value) {
+    crossNavigate('ai-impact', 'feature-review')
+  } else {
+    nav.navigateTo('overview')
+  }
 }
 
 const trafficSignals = computed(() => feature.value?.trafficSignals || null)
@@ -228,6 +242,7 @@ function formatDate(iso) {
 onMounted(() => {
   if (featureKey.value) {
     loadFeature(featureKey.value)
+    loadAIReview(featureKey.value)
   }
 })
 </script>
@@ -239,7 +254,7 @@ onMounted(() => {
       class="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-1"
       @click="goBack"
     >
-      &larr; Back to Overview
+      &larr; {{ fromRfe ? 'Back to RFE Review' : fromFeatureReview ? 'Back to Feature Review' : 'Back to Overview' }}
     </button>
 
     <!-- Loading -->
@@ -379,6 +394,15 @@ onMounted(() => {
           {{ ageDays(feature.created) }} days active
         </div>
       </div>
+
+      <!-- AI Review Section -->
+      <AIReviewSection
+        :featureReview="aiReview"
+        :rfeAssessment="rfeAssessment"
+        :loading="aiReviewLoading"
+        :error="aiReviewError"
+        :jiraHost="JIRA_BASE.replace('/browse/', '')"
+      />
 
       <!-- Traffic Signals (blockers / warnings / flowing) -->
       <div
