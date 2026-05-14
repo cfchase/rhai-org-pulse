@@ -30,9 +30,9 @@ function computeCumulativeBugData(bugs, versions, storage) {
   }
 
   let maxDays = -1;
-  for (const bugs of versionBugs.values()) {
-    if (bugs.length > 0) {
-      maxDays = Math.max(maxDays, bugs[bugs.length - 1].daysSinceRelease);
+  for (const entries of versionBugs.values()) {
+    if (entries.length > 0) {
+      maxDays = Math.max(maxDays, entries[entries.length - 1].daysSinceRelease);
     }
   }
 
