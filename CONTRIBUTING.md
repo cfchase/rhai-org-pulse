@@ -168,6 +168,25 @@ Smoke tests run Playwright in a container, so no local browser installation is n
 
 **macOS note:** The Playwright container bind-mounts your workspace and runs `npm ci`, which installs Linux-native packages into your local `node_modules/`. After running `make smoke-test`, you may need to run `npm ci` again to restore macOS-native packages before running local commands like `npm test` or `npm run dev`.
 
+#### Integration tests
+
+Integration tests are run using **Playwright**. They validate that:
+1. Modules are visible _and_ clickable from the sidebar
+1. Modules load in Org Pulse when clicked
+1. Module content renders properly after being loaded
+
+Use `make` to run a module's integration tests:
+
+```bash
+MODULE_NAME=ai-impact                   # Choose a testable module
+make test-module MODULE=${MODULE_NAME}  # Runs the integration tests against an existing module
+```
+
+Available, testable modules:
+- [ai-impact](./modules/ai-impact/)
+
+Integration tests for [other modules](./modules/) are coming soon.
+
 ## Deployment
 
 Deployed to OpenShift via ArgoCD. Kustomize manifests in `deploy/openshift/`.

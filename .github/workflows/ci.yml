@@ -81,6 +81,8 @@ jobs:
     if: needs.test.outputs.app == 'true'
     permissions:
       contents: read
+    env:
+      CONTAINER_RUNTIME: docker
 
     steps:
       - name: Checkout code

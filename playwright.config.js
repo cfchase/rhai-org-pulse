@@ -2,11 +2,18 @@
 const { defineConfig, devices } = require('@playwright/test');
 
 /**
- * Playwright configuration optimized for CI smoke tests.
+ * Playwright configuration for smoke and integration tests.
+ *
+ * Test Types:
+ * - Smoke tests (./tests/smoke): Fast, critical path tests for production containers
+ * - Integration tests (./tests/integration): Module-specific functional tests
+ *
  * @see https://playwright.dev/docs/test-configuration
  */
 module.exports = defineConfig({
-  testDir: './tests/smoke',
+  // Test directory: defaults to smoke tests, but can be overridden for integration tests
+  // Integration tests use tags (e.g., @ai-impact) to filter by module
+  testDir: './tests',
 
   // Each test can run for a max of 30 seconds
   timeout: 30 * 1000,
@@ -17,7 +24,7 @@ module.exports = defineConfig({
   // Fail the build on CI if tests were accidentally left in exclusive mode
   forbidOnly: !!process.env.CI,
 
-  // No retries - smoke tests should be stable, failures indicate real problems
+  // No retries - tests should be stable, failures indicate real problems
   retries: 0,
 
   // Single worker in CI to avoid resource contention
@@ -33,7 +40,7 @@ module.exports = defineConfig({
     actionTimeout: 10 * 1000,
   },
 
-  // Web server configuration - wait for the container/server to be ready
+  // Web server configuration - only for local dev (not used in container tests)
   webServer: process.env.CI ? undefined : {
     command: 'npm run dev',
     url: 'http://localhost:5173',
@@ -41,7 +48,7 @@ module.exports = defineConfig({
     timeout: 120 * 1000,
   },
 
-  // Test projects - Chromium only for fast CI smoke tests
+  // Test projects - Chromium only for fast CI tests
   projects: [
     {
       name: 'chromium',

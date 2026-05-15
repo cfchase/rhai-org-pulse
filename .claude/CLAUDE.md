@@ -174,6 +174,32 @@ CI workflow (`build-images.yml`):
 2. Runs `make smoke-test FRONTEND_IMAGE=<image>:<sha> BACKEND_IMAGE=<image>:<sha>` against the built images
 3. Uploads images to Quay if tests pass
 
+**Integration tests** use Playwright to verify module-specific functionality against production containers in demo mode. Located in `tests/integration/<module>.spec.js`:
+
+```bash
+make test-module MODULE=ai-impact
+```
+
+Integration tests verify:
+- Modules are visible and clickable in sidebar
+- Module views load correctly
+- Module content renders (buttons, inputs, tables, cards)
+- API endpoints return data
+- Disabled menu items are non-clickable
+
+Tests run in same Playwright container as smoke tests. Uses tag-based filtering (`@module-name`) for selective execution.
+
+CI workflow (`integration-tests.yml`):
+- Triggers on changes to `modules/**` or `tests/integration/**`
+- Uses `dorny/paths-filter` to detect which modules changed
+- Runs tests only for changed modules via generic `test-module` Makefile target
+- Reusable composite action at `.github/actions/test-org-pulse-module/`
+
+To add integration tests for a new module:
+1. Create `tests/integration/<module>.spec.js` with `@<module-name>` tag
+2. Add filter in `integration-tests.yml` `detect-changes` job
+3. Add job output and test job (copy pattern from `test-ai-impact`)
+
 ### Building images on ARM Macs
 Standard `--platform linux/amd64` builds fail: npm times out under QEMU, esbuild crashes. Workaround: build/install natively, then copy into amd64 base images. See `deploy/OPENSHIFT.md` step 3 for details. This works because the backend has no native Node addons (all pure JS).
 

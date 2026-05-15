@@ -20,8 +20,9 @@ export default defineConfig({
     ],
     exclude: [
       ...configDefaults.exclude,
-      '**/tests/smoke/**',       // Exclude Playwright smoke tests
-      'playwright-report/**',    // Exclude any Playwright output folders
+      '**/tests/smoke/**',        // Exclude Playwright smoke tests
+      '**/tests/integration/**',  // Exclude Playwright integration tests
+      'playwright-report/**',     // Exclude any Playwright output folders
     ],
   },
 })
