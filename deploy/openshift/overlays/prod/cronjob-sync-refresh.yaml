@@ -183,12 +183,17 @@ spec:
                     echo "WARNING: Feature Jira sync timed out (non-fatal, continuing)"
                   fi
 
-                  # Step 5: Trigger Releases Execution refresh
+                  # Step 5: Sync Release Registry with Product Pages
+                  echo "=== Syncing Release Registry with Product Pages ==="
+                  curl -sf -X POST "$BACKEND/api/modules/releases/registry/discover" \
+                    -H "$AUTH_HEADER" -H "$PROXY_SECRET_HEADER" || echo "Registry sync skipped (no PP config)"
+
+                  # Step 6: Trigger Releases Execution refresh
                   echo "=== Triggering Releases Execution refresh ==="
                   curl -sf -X POST "$BACKEND/api/modules/releases/execution/refresh" \
                     -H "$AUTH_HEADER" -H "$PROXY_SECRET_HEADER" || echo "Releases Execution refresh skipped"
 
-                  # Step 6: Trigger data backup to S3
+                  # Step 7: Trigger data backup to S3
                   echo "=== Triggering data backup ==="
                   BACKUP_RESP=$(curl -sf -X POST "$BACKEND/api/admin/backup" \
                     -H "$AUTH_HEADER" -H "$PROXY_SECRET_HEADER" -H "Content-Type: application/json" \
