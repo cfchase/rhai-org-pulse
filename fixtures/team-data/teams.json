@@ -6,6 +6,7 @@
       "orgKey": "achen",
       "createdAt": "2026-01-01T00:00:00.000Z",
       "createdBy": "admin@example.com",
+      "description": "Owns the **core platform services** and developer experience.\n\n- API gateway and service mesh\n- CI/CD pipeline tooling\n- Platform dashboard and observability",
       "metadata": {
         "field_g7h8i9": "pmanager",
         "field_tf0001": "Active",

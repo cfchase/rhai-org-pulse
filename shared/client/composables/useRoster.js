@@ -33,7 +33,8 @@ export function useRoster() {
         displayName: team.displayName,
         members: team.members,
         teamId: team.teamId || null,
-        metadata: team.metadata || {}
+        metadata: team.metadata || {},
+        description: team.description || null
       }
     }
 

@@ -63,6 +63,60 @@
           </div>
         </div>
 
+        <!-- Team description -->
+        <div v-if="isInAppMode && (team.description || canManageMembers)" class="mt-3">
+          <template v-if="!editingDescription">
+            <div v-if="team.description" class="group rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 px-4 py-3">
+              <div class="flex items-start gap-2">
+                <div
+                  class="flex-1 prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:first:mt-0 text-gray-700 dark:text-gray-300"
+                  v-html="renderedDescription"
+                ></div>
+                <button
+                  v-if="canManageMembers"
+                  @click="startEditingDescription"
+                  class="mt-0.5 p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                  title="Edit description"
+                >
+                  <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <button
+              v-else-if="canManageMembers"
+              @click="startEditingDescription"
+              class="w-full rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 px-4 py-3 text-sm text-gray-400 dark:text-gray-500 hover:border-primary-400 hover:text-primary-500 dark:hover:border-primary-500 dark:hover:text-primary-400 transition-colors text-left"
+            >
+              + Add a team description
+            </button>
+          </template>
+          <div v-else class="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+            <textarea
+              v-model="editDescriptionText"
+              rows="4"
+              maxlength="2000"
+              placeholder="Describe this team's mission, scope, or responsibilities..."
+              class="w-full text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 resize-y"
+            ></textarea>
+            <div class="flex items-center justify-between mt-2">
+              <span class="text-xs text-gray-400 dark:text-gray-500">Supports Markdown formatting</span>
+              <div class="flex items-center gap-2">
+                <button
+                  @click="editingDescription = false"
+                  class="px-3 py-1 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                >Cancel</button>
+                <button
+                  @click="saveDescription"
+                  :disabled="savingDescription"
+                  class="px-3 py-1 text-sm bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 transition-colors"
+                >{{ savingDescription ? 'Saving...' : 'Save' }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Enriched header details: inline row with boards, PM/Eng Lead, and team fields -->
         <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-600 dark:text-gray-400">
           <!-- Boards (read-only inline) -->
@@ -295,6 +349,8 @@ import { useFieldDefinitions } from '@shared/client/composables/useFieldDefiniti
 import { useOrgRoster } from '../composables/useOrgRoster'
 import { refreshMetrics, getTeamMetrics, apiRequest } from '@shared/client/services/api'
 import { useManagerTutorial } from '../composables/useManagerTutorial'
+import { Marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 const nav = inject('moduleNav')
 const { teams: allTeams, rosterData, loading: rosterLoading, reloadRoster } = useRoster()
@@ -505,6 +561,41 @@ function fallbackBoardLabel(url, index) {
     return `Board ${index + 1} — ${u.hostname}`
   } catch {
     return `Board ${index + 1}`
+  }
+}
+
+// --- Description editing ---
+const editingDescription = ref(false)
+const editDescriptionText = ref('')
+const savingDescription = ref(false)
+
+const md = new Marked({ breaks: true, gfm: true })
+
+const renderedDescription = computed(() => {
+  if (!team.value?.description) return ''
+  return DOMPurify.sanitize(md.parse(team.value.description))
+})
+
+function startEditingDescription() {
+  editDescriptionText.value = team.value?.description || ''
+  editingDescription.value = true
+}
+
+async function saveDescription() {
+  if (!team.value?.teamId) return
+  savingDescription.value = true
+  try {
+    await apiRequest(`/modules/team-tracker/structure/teams/${team.value.teamId}/description`, {
+      method: 'PATCH',
+      body: JSON.stringify({ description: editDescriptionText.value.trim() || null }),
+      headers: { 'Content-Type': 'application/json' }
+    })
+    editingDescription.value = false
+    await reloadRoster()
+  } catch (error) {
+    console.error('Failed to save description:', error)
+  } finally {
+    savingDescription.value = false
   }
 }
 

@@ -309,6 +309,36 @@ function getUnassigned(storage, scope, actorUid, isAdmin, managerMap, registry) 
 }
 
 /**
+ * Update a team's description.
+ * @returns {object|null} The updated team, or null if not found
+ */
+const MAX_DESCRIPTION_LENGTH = 2000;
+
+function updateTeamDescription(storage, teamId, description, actorEmail) {
+  if (!isSafeKey(teamId)) return null;
+  const data = readTeams(storage);
+  const team = data.teams[teamId];
+  if (!team) return null;
+
+  const oldDescription = team.description || null;
+  team.description = description || null;
+  writeTeams(storage, data);
+
+  appendAuditEntry(storage, {
+    action: 'team.description.update',
+    actor: actorEmail,
+    entityType: 'team',
+    entityId: teamId,
+    entityLabel: team.name,
+    field: 'description',
+    oldValue: oldDescription,
+    newValue: team.description
+  });
+
+  return team;
+}
+
+/**
  * Update team-level field values.
  */
 function updateTeamFields(storage, teamId, fields, actorEmail) {
@@ -436,6 +466,8 @@ module.exports = {
   writeTeams,
   createTeam,
   renameTeam,
+  updateTeamDescription,
+  MAX_DESCRIPTION_LENGTH,
   deleteTeam,
   assignMember,
   assignMembersBulk,

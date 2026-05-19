@@ -215,6 +215,7 @@ module.exports = function registerRoutes(router, context) {
               if (teamObj) {
                 teamMap[teamName].metadata = teamObj.metadata || {};
                 teamMap[teamName].teamId = teamObj.id;
+                teamMap[teamName].description = teamObj.description || null;
               }
             }
           }
@@ -230,7 +231,8 @@ module.exports = function registerRoutes(router, context) {
               displayName: team.name,
               members: [],
               metadata: team.metadata || {},
-              teamId: team.id
+              teamId: team.id,
+              description: team.description || null
             };
           }
         }
@@ -806,6 +808,36 @@ module.exports = function registerRoutes(router, context) {
     if (!name) return res.status(400).json({ error: 'name is required' });
     if (typeof name !== 'string' || name.length > 100) return res.status(400).json({ error: 'name must be a string of 100 characters or fewer' });
     const team = teamStore.renameTeam(storage, req.params.teamId, name.trim(), req.auditActor);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    res.json(team);
+  });
+
+  /**
+   * @openapi
+   * /api/modules/team-tracker/structure/teams/{teamId}/description:
+   *   patch:
+   *     tags: ['TT: Structure']
+   *     summary: Update a team's description
+   *     parameters:
+   *       - in: path
+   *         name: teamId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: The team ID
+   *     responses:
+   *       200:
+   *         description: Updated team
+   */
+  router.patch('/structure/teams/:teamId/description', requireTeamPurview, requireScope('team-tracker:write'), function(req, res) {
+    const guard = demoWriteGuard(res);
+    if (guard) return;
+    const { description } = req.body;
+    if (description !== null && description !== undefined) {
+      if (typeof description !== 'string') return res.status(400).json({ error: 'description must be a string or null' });
+      if (description.length > teamStore.MAX_DESCRIPTION_LENGTH) return res.status(400).json({ error: `description must be ${teamStore.MAX_DESCRIPTION_LENGTH} characters or fewer` });
+    }
+    const team = teamStore.updateTeamDescription(storage, req.params.teamId, description || null, req.auditActor);
     if (!team) return res.status(404).json({ error: 'Team not found' });
     res.json(team);
   });

@@ -380,6 +380,7 @@ All routes prefixed with `/api`. Authenticated via OAuth proxy in production.
 - `/api/tokens/:id/scopes` — update own token scopes
 - `/api/admin/tokens/:id/scopes` — update any token scopes (admin)
 - `/api/modules/team-tracker/structure/teams/:teamId` — rename team (admin/team-admin)
+- `/api/modules/team-tracker/structure/teams/:teamId/description` — update team description (team-purview)
 - `/api/modules/team-tracker/structure/field-definitions/person/:fieldId` — edit field def (admin/team-admin)
 - `/api/modules/team-tracker/structure/field-definitions/team/:fieldId` — edit field def (admin/team-admin)
 - `/api/modules/team-tracker/structure/person/:uid/fields` — update person fields (manager/admin)
