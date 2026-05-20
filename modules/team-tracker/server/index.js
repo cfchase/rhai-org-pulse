@@ -3791,6 +3791,14 @@ module.exports = function registerRoutes(router, context) {
    *   post:
    *     tags: ['TT: Snapshots']
    *     summary: Generate snapshots for all teams
+   *     requestBody:
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               refreshCurrent:
+   *                 type: boolean
    *     responses:
    *       200:
    *         description: Snapshot generation result
@@ -3799,6 +3807,7 @@ module.exports = function registerRoutes(router, context) {
    */
   router.post('/snapshots/generate', requireAdmin, requireScope('team-tracker:write'), function(req, res) {
     try {
+      const refreshCurrent = req.body?.refreshCurrent === true;
       const roster = deriveRoster();
       const completedPeriods = snapshots.getCompletedPeriods();
       const currentPeriod = snapshots.getCurrentPeriod();
@@ -3813,6 +3822,7 @@ module.exports = function registerRoutes(router, context) {
 
       let generated = 0;
       let skipped = 0;
+      let refreshed = 0;
 
       for (const org of roster.orgs) {
         for (const [teamName, team] of Object.entries(org.teams)) {
@@ -3820,7 +3830,13 @@ module.exports = function registerRoutes(router, context) {
           for (const period of periodsToSnapshot) {
             const path = snapshots.snapshotPath(teamKey, period.end);
             const existing = readFromStorage(path);
-            if (existing) {
+
+            // Regenerate current period snapshot when refreshCurrent is set
+            if (existing && refreshCurrent && currentPeriod && period.monthKey === currentPeriod.monthKey) {
+              const snapshot = snapshots.generateSnapshot(storage, teamKey, team, period);
+              writeToStorage(path, snapshot);
+              refreshed++;
+            } else if (existing) {
               skipped++;
             } else {
               snapshots.generateAndStoreSnapshot(storage, teamKey, team, period);
@@ -3830,7 +3846,7 @@ module.exports = function registerRoutes(router, context) {
         }
       }
 
-      res.json({ status: 'complete', generated, skipped });
+      res.json({ status: 'complete', generated, skipped, refreshed });
     } catch (error) {
       console.error('Generate snapshots error:', error);
       res.status(500).json({ error: error.message });

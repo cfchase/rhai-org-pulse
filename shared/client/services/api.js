@@ -326,10 +326,11 @@ export async function getPersonSnapshots(teamKey, personName) {
   return apiRequest(`/modules/team-tracker/snapshots/${encodeURIComponent(teamKey)}/${encodeURIComponent(personName)}`)
 }
 
-export async function generateSnapshots() {
+export async function generateSnapshots(options = {}) {
   return apiRequest('/modules/team-tracker/snapshots/generate', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options)
   })
 }
 

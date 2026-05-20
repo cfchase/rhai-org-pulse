@@ -183,6 +183,12 @@ spec:
                     echo "WARNING: Feature Jira sync timed out (non-fatal, continuing)"
                   fi
 
+                  # Step 4c: Generate metric snapshots (refresh current month)
+                  echo "=== Generating metric snapshots ==="
+                  curl -sf -X POST "$BACKEND/api/modules/team-tracker/snapshots/generate" \
+                    -H "$AUTH_HEADER" -H "$PROXY_SECRET_HEADER" -H "Content-Type: application/json" \
+                    -d '{"refreshCurrent":true}' || echo "WARNING: Snapshot generation failed (non-fatal)"
+
                   # Step 5: Sync Release Registry with Product Pages
                   echo "=== Syncing Release Registry with Product Pages ==="
                   curl -sf -X POST "$BACKEND/api/modules/releases/registry/discover" \
