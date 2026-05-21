@@ -57,7 +57,7 @@ async function validateGithubCandidates(candidates) {
 
 /**
  * Validate GitLab candidates for a single person.
- * Calls GET /users?username=:login and checks `is_org` is not true.
+ * Calls GET /api/v4/users?username=:login — returns users only (not groups).
  *
  * @param {string[]} candidates - GitLab username candidates
  * @param {{ baseUrl?: string }} [options]
