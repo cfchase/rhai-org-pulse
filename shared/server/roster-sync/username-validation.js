@@ -88,9 +88,6 @@ async function validateGitlabCandidates(candidates, options) {
     }
   }
 
-  // Also check if any candidate is a group (not a user)
-  // If we got here, none matched as users via /users endpoint.
-  // Try /groups/:path — if it resolves, it's a group, not a user.
   return null;
 }
 
