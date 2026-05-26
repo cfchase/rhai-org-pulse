@@ -20,6 +20,7 @@ const FIELDS = `summary,issuetype,status,assignee,resolution,resolutiondate,crea
 const FIELDS_VERSION = 'v2';
 
 const NO_WORK_RESOLUTIONS = ["Won't Do", 'Obsolete', 'Duplicate', 'Cannot Reproduce'];
+const NO_WORK_RESOLUTION_FILTER = ` AND resolution NOT IN (${NO_WORK_RESOLUTIONS.map(r => `"${r}"`).join(', ')})`;
 
 // Force a full refresh if the last full refresh was more than 7 days ago
 const FULL_REFRESH_INTERVAL_DAYS = 7;
@@ -391,7 +392,7 @@ async function fetchPersonMetrics(jiraRequest, jiraDisplayName, options = {}) {
     sinceDate.setDate(sinceDate.getDate() - 1);
     const sinceDateStr = sinceDate.toISOString().slice(0, 10);
 
-    const resolvedJql = `assignee = "${accountId}" AND resolved >= "${sinceDateStr}" AND issuetype in (Story, Bug, Task, Vulnerability, Weakness) AND resolution NOT IN ("Won't Do", "Obsolete", "Duplicate", "Cannot Reproduce")${projectFilter}`;
+    const resolvedJql = `assignee = "${accountId}" AND resolved >= "${sinceDateStr}" AND issuetype in (Story, Bug, Task, Vulnerability, Weakness)${NO_WORK_RESOLUTION_FILTER}${projectFilter}`;
 
     const [freshResolvedIssues, inProgressIssues] = await Promise.all([
       fetchAllJqlResults(jiraRequest, resolvedJql, FIELDS, { expand: 'changelog' }),
@@ -452,7 +453,7 @@ async function fetchPersonMetrics(jiraRequest, jiraDisplayName, options = {}) {
   }
 
   // Full refresh
-  const resolvedJql = `assignee = "${accountId}" AND resolved >= -${lookbackDays}d AND issuetype in (Story, Bug, Task, Vulnerability, Weakness) AND resolution NOT IN ("Won't Do", "Obsolete", "Duplicate", "Cannot Reproduce")${projectFilter}`;
+  const resolvedJql = `assignee = "${accountId}" AND resolved >= -${lookbackDays}d AND issuetype in (Story, Bug, Task, Vulnerability, Weakness)${NO_WORK_RESOLUTION_FILTER}${projectFilter}`;
 
   const [resolvedIssues, inProgressIssues] = await Promise.all([
     fetchAllJqlResults(jiraRequest, resolvedJql, FIELDS, { expand: 'changelog' }),
