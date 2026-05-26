@@ -329,13 +329,19 @@ module.exports = function registerHygieneRoutes(router, context) {
       return res.json({ status: 'already_running' });
     }
 
-    // Build version list from previously-refreshed hygiene data files
-    // (these use the correct Jira Target Version strings, unlike registry IDs)
-    var hygieneFiles = storage.listStorageFiles ? storage.listStorageFiles('releases/hygiene') : [];
+    // Build version list from active registry releases.
+    // Use displayName (not id) — displayName is the Jira "Target Version" string
+    // used in JQL queries and as the storage key (e.g. "RHOAI 2.14").
+    var registry = readRegistry(storage.readFromStorage);
+    var registryReleases = registry.releases || [];
+    var seen = {};
     var activeVersions = [];
-    for (var hfi = 0; hfi < hygieneFiles.length; hfi++) {
-      var match = hygieneFiles[hfi].match(/^features-(.+)\.json$/);
-      if (match) activeVersions.push(match[1]);
+    for (var rri = 0; rri < registryReleases.length; rri++) {
+      var rel = registryReleases[rri];
+      if (rel.state === 'archived' || !rel.displayName) continue;
+      if (seen[rel.displayName]) continue;
+      seen[rel.displayName] = true;
+      activeVersions.push(rel.displayName);
     }
     activeVersions.sort();
 
