@@ -9,6 +9,7 @@ const nav = inject('moduleNav')
 // ── Version / product state ──
 
 const allVersions = ref([])
+const registryReleases = ref([])
 const selectedProduct = ref(null)
 const selectedVersion = ref('')
 const loading = ref(false)
@@ -57,8 +58,10 @@ const fetchedAt = ref(null)
 
 async function loadVersions() {
   try {
-    const data = await apiRequest('/modules/releases/execution/versions')
-    allVersions.value = data.versions || []
+    const data = await apiRequest('/modules/releases/registry')
+    const releases = (data.releases || []).filter(r => r.state !== 'archived')
+    registryReleases.value = releases
+    allVersions.value = releases.map(r => r.displayName).sort()
 
     // Restore filters from URL params (e.g. returning from feature detail)
     const params = nav.params.value || {}
@@ -81,10 +84,16 @@ async function loadData(version) {
   error.value = null
 
   try {
+    // Look up registry fixVersions for execution feature query
+    const rel = registryReleases.value.find(r => r.displayName === version)
+    const execVersion = (rel && rel.fixVersions && rel.fixVersions.length > 0)
+      ? rel.fixVersions[0]
+      : version
+
     const [hygieneData, summaryData, execData] = await Promise.all([
       apiRequest(`/modules/releases/hygiene/features?version=${encodeURIComponent(version)}`),
       apiRequest(`/modules/releases/hygiene/summary?version=${encodeURIComponent(version)}`),
-      apiRequest(`/modules/releases/execution/features?version=${encodeURIComponent(version)}`)
+      apiRequest(`/modules/releases/execution/features?version=${encodeURIComponent(execVersion)}`)
     ])
 
     hygieneFeatures.value = hygieneData.features || {}
