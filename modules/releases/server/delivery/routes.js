@@ -1443,9 +1443,86 @@ module.exports = function registerRoutes(router, context) {
         writeToStorage(`releases/delivery/quality/bugs-${project}.json`, bugs)
       }
 
+      bugsCache = { data: null, timestamp: 0, projectsKey: '' }
       res.json({ success: true, fetchedAt: new Date().toISOString() })
     } catch (error) {
       console.error('[releases/quality] Refresh error:', error)
+      res.status(500).json({ error: error.message })
+    }
+  })
+
+  /**
+   * @openapi
+   * /api/modules/releases/delivery/quality/debug:
+   *   get:
+   *     tags: ['Releases: Quality']
+   *     summary: Debug endpoint for diagnosing bug count issues (admin only)
+   *     responses:
+   *       200:
+   *         description: Diagnostic information about bug data and version matching
+   */
+  router.get('/quality/debug', requireAdmin, requireScope('releases:read'), function(req, res) {
+    try {
+      const config = getConfig(readFromStorage)
+      const versions = readFromStorage('releases/delivery/quality/versions.json') || []
+
+      const cacheSnapshot = {
+        projectsKey: bugsCache.projectsKey,
+        cached: bugsCache.data !== null,
+        cacheSize: bugsCache.data ? bugsCache.data.length : 0,
+        cacheAge: bugsCache.timestamp ? Date.now() - bugsCache.timestamp : null
+      }
+
+      const allBugs = loadAllBugs(config.projectKeys)
+
+      const bugsByProject = {}
+      for (const project of config.projectKeys) {
+        const bugs = readFromStorage(`releases/delivery/quality/bugs-${project}.json`) || []
+        bugsByProject[project] = bugs.length
+      }
+
+      const sampleBugs = allBugs.slice(0, 5).map(b => ({
+        key: b.key,
+        affectedVersions: b.affectedVersions,
+        components: b.components,
+        created: b.created,
+        releaseDate: b.releaseDate
+      }))
+
+      const sampleVersions = versions.slice(0, 10).map(v => ({
+        name: v.name,
+        releaseDate: v.releaseDate,
+        project: v.project
+      }))
+
+      // Find unique affected version names from bugs
+      const affectedVersionSet = new Set()
+      allBugs.forEach(bug => {
+        bug.affectedVersions.forEach(v => affectedVersionSet.add(v))
+      })
+      const uniqueAffectedVersions = Array.from(affectedVersionSet).sort().slice(0, 20)
+
+      // Find version names from versions.json
+      const versionNameSet = new Set(versions.map(v => v.name))
+      const versionNames = Array.from(versionNameSet).sort().slice(0, 20)
+
+      res.json({
+        config: {
+          projectKeys: config.projectKeys
+        },
+        counts: {
+          totalVersions: versions.length,
+          totalBugs: allBugs.length,
+          bugsByProject
+        },
+        sampleBugs,
+        sampleVersions,
+        uniqueAffectedVersions,
+        versionNames,
+        cacheInfo: cacheSnapshot
+      })
+    } catch (error) {
+      console.error('[releases/quality] Debug error:', error)
       res.status(500).json({ error: error.message })
     }
   })
