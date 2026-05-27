@@ -108,9 +108,6 @@ shared/
     components/     # Shared UI (Toast, LoadingOverlay, RefreshModal)
     index.js        # Barrel export
   server/
-    module-context.js  # Module contract: buildModuleContext, createTestContext (JSDoc typedefs)
-    refresh-registry.js # Ordered refresh handler registry
-    export-registry.js  # Module data export hook registry
     storage.js      # Filesystem storage abstraction
     demo-storage.js # Fixture-backed storage for demo mode
     auth.js         # Auth middleware (requireAuth, requireAdmin)
@@ -248,6 +245,8 @@ All routes prefixed with `/api`. Authenticated via OAuth proxy in production.
 - `/api/modules/team-tracker/manager/dashboard` — manager dashboard data
 - `/api/modules/team-tracker/admin/field-completeness` — all people/teams with field data for data quality auditing (team-admin/admin)
 - `/api/modules/team-tracker/structure/teams` — list teams
+- `/api/modules/team-tracker/structure/teams/query` — query teams by metadata field values with AND/OR, pagination
+- `/api/modules/team-tracker/structure/group-by` — group teams by metadata field value (inverted index)
 - `/api/modules/team-tracker/structure/unassigned` — unassigned people
 - `/api/modules/team-tracker/structure/field-definitions` — field definitions
 - `/api/modules/team-tracker/structure/audit-log` — audit log
@@ -261,6 +260,7 @@ All routes prefixed with `/api`. Authenticated via OAuth proxy in production.
 - `/api/modules/team-tracker/structure/migrate/preview` — migration preview (admin)
 - `/api/modules/team-tracker/structure/migrate/field-to-options/preview` — field-to-options migration preview (team-admin)
 - `/api/modules/releases/registry` — list releases
+- `/api/modules/releases/registry/config` — registry config (Jira projects for version resolution) (release-manager)
 - `/api/modules/releases/registry/:id` — single release
 - `/api/modules/releases/audit-log` — unified audit log across all release domains
 - `/api/modules/releases/planning/releases` — planning releases
@@ -294,6 +294,12 @@ All routes prefixed with `/api`. Authenticated via OAuth proxy in production.
 - `/api/modules/releases/delivery/quality/versions` — quality versions with bug counts
 - `/api/modules/releases/delivery/quality/bugs` — cumulative bug data for selected versions
 - `/api/modules/releases/delivery/quality/components` — components with bug counts
+- `/api/modules/releases/delivery/quality/debug` — debug diagnostics for bug count issues (admin)
+- `/api/modules/releases/hygiene/features` — hygiene features for a version
+- `/api/modules/releases/hygiene/summary` — aggregate violation summary for a version
+- `/api/modules/releases/hygiene/refresh/status` — current hygiene refresh state
+- `/api/modules/releases/hygiene/config` — hygiene rule configuration (release-manager)
+- `/api/modules/releases/hygiene/program-report` — cross-version aggregate hygiene report
 - `/api/modules/ai-impact/assessments` — all assessments
 - `/api/modules/ai-impact/assessments/:key` — single assessment + history
 - `/api/modules/ai-impact/assessments/status` — assessment status (admin)
@@ -373,7 +379,10 @@ All routes prefixed with `/api`. Authenticated via OAuth proxy in production.
 - `/api/modules/team-tracker/field-exceptions` — create field exception (team-admin/admin)
 - `/api/modules/team-tracker/registry/people/ldap-import` — LDAP import (team-admin/admin)
 - `/api/modules/releases/registry` — create release (release-manager)
+- `/api/modules/releases/registry/config` — save registry config (release-manager)
 - `/api/modules/releases/registry/discover` — auto-discover from Product Pages (release-manager)
+- `/api/modules/releases/registry/resolve-jira-versions` — preview Jira version resolution (release-manager)
+- `/api/modules/releases/registry/resolve-jira-versions/apply` — apply resolved Jira versions to registry (release-manager)
 - `/api/modules/releases/admin/migrate-storage` — clean up old storage paths after migration (admin)
 - `/api/modules/releases/planning/releases` — create planning release (release-manager)
 - `/api/modules/releases/planning/releases/:version/big-rocks` — create big rock (release-manager)
@@ -392,6 +401,9 @@ All routes prefixed with `/api`. Authenticated via OAuth proxy in production.
 - `/api/modules/releases/delivery/admin/releases` — upload releases (admin)
 - `/api/modules/releases/delivery/conforma/bulk` — full replace conforma data (admin)
 - `/api/modules/releases/delivery/quality/refresh` — refresh quality data from Jira (admin)
+- `/api/modules/releases/hygiene/refresh` — trigger hygiene data refresh (release-manager)
+- `/api/modules/releases/hygiene/refresh-all` — refresh hygiene data for all stored versions (release-manager)
+- `/api/modules/releases/hygiene/config` — save hygiene rule configuration (release-manager)
 - `/api/modules/ai-impact/assessments/bulk` — bulk upsert assessments (admin)
 - `/api/modules/ai-impact/features/bulk` — bulk upsert features (admin)
 - `/api/modules/ai-impact/test-plans/bulk` — bulk upsert test plans (admin)

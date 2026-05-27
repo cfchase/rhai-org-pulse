@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { createTestContext } from '../../../../shared/server/module-context.js'
+const { describe, it, expect, vi } = require('vitest')
+const { createTestContext } = require('../../../../shared/server/module-context')
 
 const registerRoutes = require('../../server/index')
 

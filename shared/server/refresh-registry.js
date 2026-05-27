@@ -39,12 +39,14 @@ function createRefreshRegistry() {
     const results = {}
     for (const [id, config] of sorted) {
       try {
+        let timer
         const result = await Promise.race([
           config.handler(options),
           new Promise(function (_, reject) {
-            setTimeout(function () { reject(new Error('Refresh "' + id + '" timed out after ' + timeoutMs + 'ms')) }, timeoutMs)
+            timer = setTimeout(function () { reject(new Error('Refresh "' + id + '" timed out after ' + timeoutMs + 'ms')) }, timeoutMs)
           })
         ])
+        clearTimeout(timer)
         results[id] = { success: true, result }
       } catch (err) {
         console.error('[refresh-registry] "' + id + '" failed:', err.message)
