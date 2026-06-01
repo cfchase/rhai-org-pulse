@@ -219,7 +219,7 @@ All routes prefixed with `/api`. Authenticated via OAuth proxy in production.
 
 **GET:**
 - `/api/healthz` — health check (no auth)
-- `/api/whoami` — current user info (proxy + token auth). Includes `permissionTier`, `isTeamAdmin`, `roles`.
+- `/api/whoami` — current user info (proxy + token auth). Includes `isManager`, `isTeamAdmin`, `roles`.
 - `/api/site-config` — site configuration
 - `/api/messages` — app-wide messages (computed + stored)
 - `/api/tokens` — current user's API tokens
@@ -235,13 +235,15 @@ All routes prefixed with `/api`. Authenticated via OAuth proxy in production.
 - `/api/allowlist` — authorized email list
 - `/api/roles/me` — current user's roles
 - `/api/roles` — all role assignments (admin)
+- `/api/roles/available` — all registered roles from the role registry
+- `/api/admin/refresh/status` — refresh registry status (admin)
 - `/api/admin/roster-sync/config` — roster sync config
 - `/api/admin/roster-sync/status` — sync status
 - `/api/modules/team-tracker/sheets/discover` — discover sheet names (admin)
 - `/api/modules/team-tracker/org-teams` — org-roster teams with member counts
 - `/api/modules/team-tracker/org-teams/:teamKey` — single team detail
 - `/api/modules/team-tracker/org-teams/:teamKey/members` — team members
-- `/api/modules/team-tracker/permissions/me` — permission tier + managed UIDs
+- `/api/modules/team-tracker/permissions/me` — roles, isManager + managed UIDs
 - `/api/modules/team-tracker/manager/dashboard` — manager dashboard data
 - `/api/modules/team-tracker/admin/field-completeness` — all people/teams with field data for data quality auditing (team-admin/admin)
 - `/api/modules/team-tracker/structure/teams` — list teams
@@ -297,6 +299,7 @@ All routes prefixed with `/api`. Authenticated via OAuth proxy in production.
 - `/api/modules/releases/delivery/quality/bugs` — cumulative bug data for selected versions
 - `/api/modules/releases/delivery/quality/components` — components with bug counts
 - `/api/modules/releases/delivery/quality/debug` — debug diagnostics for bug count issues (admin)
+- `/api/modules/releases/delivery/commitment/versions` — get available versions for commitment tracking (independent of delivery analysis)
 - `/api/modules/releases/delivery/commitment/:version/:phase` — commitment tracking data for a release phase
 - `/api/modules/releases/delivery/releases-metadata` — releases metadata (product names, dates)
 - `/api/modules/releases/hygiene/features` — hygiene features for a version
@@ -364,6 +367,8 @@ All routes prefixed with `/api`. Authenticated via OAuth proxy in production.
 - `/api/trends/jira/refresh` — refresh Jira trends
 - `/api/trends/github/refresh` — refresh GitHub history
 - `/api/trends/gitlab/refresh` — refresh GitLab history
+- `/api/admin/refresh-all` — trigger full refresh of all handlers (admin)
+- `/api/admin/refresh/:module` — trigger refresh for a single module (admin)
 - `/api/admin/roster-sync/config` — save sync config
 - `/api/admin/roster-sync/trigger` — trigger manual sync
 - `/api/admin/roster-sync/unified` — unified roster + metadata sync (admin)

@@ -109,7 +109,20 @@ function migrateStoragePaths(storage) {
 }
 
 module.exports = function registerRoutes(router, context) {
-  const { storage, requireAuth, requireAdmin, requireReleaseManager, requireScope, roleStore } = context;
+  const { storage, requireAuth, requireAdmin, requireRole, requireScope, roleStore } = context;
+  const requireReleaseManager = requireRole('release-manager');
+
+  // Register release-manager role
+  context.registerRole('release-manager', {
+    label: 'Release Manager',
+    description: 'Manage release planning, execution, and delivery'
+  });
+
+  // Register module scopes
+  context.registerScopes([
+    { key: 'releases:read', label: 'Releases (Read)', description: 'Read release planning, execution, and delivery data', category: 'Releases' },
+    { key: 'releases:write', label: 'Releases (Write)', description: 'Mutate release planning, execution, and delivery data', category: 'Releases' }
+  ]);
 
   // Run storage path migration on module startup (skip if already done)
   const migrationMarker = storage.readFromStorage('releases/.migration-complete');
@@ -123,7 +136,7 @@ module.exports = function registerRoutes(router, context) {
   }
 
   // Registry routes (top-level under /api/modules/releases/)
-  registerRegistryRoutes(router, { storage, requireAuth, requireReleaseManager, requireScope });
+  registerRegistryRoutes(router, { storage, requireAuth, requireReleaseManager, requireScope, registerRefresh: context.registerRefresh || null, isRefreshRunning: context.isRefreshRunning || null });
 
   // Planning sub-router (mounted at /api/modules/releases/planning/)
   var planningRouter = express.Router();
@@ -145,7 +158,9 @@ module.exports = function registerRoutes(router, context) {
     requireAuth,
     requireAdmin,
     requireScope,
-    registerDiagnostics: context.registerDiagnostics || null
+    registerDiagnostics: context.registerDiagnostics || null,
+    registerRefresh: context.registerRefresh || null,
+    isRefreshRunning: context.isRefreshRunning || null
   });
   registerFeatureTrackingRoutes(executionRouter, {
     storage,
@@ -162,7 +177,9 @@ module.exports = function registerRoutes(router, context) {
     requireAuth,
     requireAdmin,
     requireScope,
-    registerDiagnostics: context.registerDiagnostics || null
+    registerDiagnostics: context.registerDiagnostics || null,
+    registerRefresh: context.registerRefresh || null,
+    isRefreshRunning: context.isRefreshRunning || null
   });
   router.use('/delivery', deliveryRouter);
 
@@ -174,7 +191,9 @@ module.exports = function registerRoutes(router, context) {
     requireAdmin,
     requireReleaseManager,
     requireScope,
-    registerDiagnostics: context.registerDiagnostics || null
+    registerDiagnostics: context.registerDiagnostics || null,
+    registerRefresh: context.registerRefresh || null,
+    isRefreshRunning: context.isRefreshRunning || null
   });
   router.use('/hygiene', hygieneRouter);
 

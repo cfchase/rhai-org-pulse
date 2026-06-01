@@ -1,6 +1,12 @@
 module.exports = function registerRoutes(router, context) {
-  const { storage, requireAdmin, requireTeamAdmin, requireScope, roleStore } = context;
+  const { storage, requireAdmin, requireTeamAdmin, requireScope } = context;
   const { readFromStorage, writeToStorage, listStorageFiles, deleteStorageDirectory } = storage;
+
+  // Register module scopes
+  context.registerScopes([
+    { key: 'team-tracker:read', label: 'Team Tracker (Read)', description: 'Read team structure, fields, snapshots', category: 'Team Tracker' },
+    { key: 'team-tracker:write', label: 'Team Tracker (Write)', description: 'Mutate team structure, fields, snapshots', category: 'Team Tracker' }
+  ]);
 
   const DEMO_MODE = process.env.DEMO_MODE === 'true';
   const { JIRA_HOST, jiraRequest } = require('../../../shared/server/jira');
@@ -519,9 +525,9 @@ module.exports = function registerRoutes(router, context) {
     res.json({
       email: req.userEmail,
       uid: req.userUid,
-      tier: req.permissionTier,
-      managedUids: managed,
-      roles: roleStore ? roleStore.getRoles(req.userEmail) : []
+      roles: req.userRoles || [],
+      isManager: req.isManager || false,
+      managedUids: managed
     });
   });
 
@@ -683,7 +689,7 @@ module.exports = function registerRoutes(router, context) {
    *         description: Not a team-admin or admin
    */
   router.get('/admin/field-completeness', requireScope('roster:read'), function(req, res) {
-    if (req.permissionTier !== 'admin' && req.permissionTier !== 'team-admin') {
+    if (!req.isAdmin && !req.isTeamAdmin) {
       return res.status(403).json({ error: 'Requires team-admin or admin role' });
     }
 
@@ -1927,7 +1933,7 @@ module.exports = function registerRoutes(router, context) {
    */
   router.get('/structure/audit-log', requireScope('team-tracker:read'), function(req, res) {
     // Only admin and managers can view audit log
-    if (req.permissionTier === 'user') {
+    if (!req.isAdmin && !req.isTeamAdmin && !req.isManager) {
       return res.status(403).json({ error: 'Manager or admin access required' });
     }
     const limit = req.query.limit ? Math.max(1, Math.min(200, parseInt(req.query.limit, 10) || 50)) : undefined;
@@ -2159,7 +2165,7 @@ module.exports = function registerRoutes(router, context) {
       }
     }
 
-    if (scope !== 'person' && refreshState.running) {
+    if (scope !== 'person' && (refreshState.running || context.isRefreshRunning())) {
       return res.status(409).json({
         error: 'Refresh already in progress',
         scope: refreshState.scope,
@@ -2831,7 +2837,8 @@ module.exports = function registerRoutes(router, context) {
           ? [...permissions.getManagedUids(req.userUid, managerMap)]
           : [];
         rosterResponse.permissions = {
-          tier: req.permissionTier,
+          roles: req.userRoles || [],
+          isManager: req.isManager || false,
           uid: req.userUid,
           managedUids: managed
         };
@@ -4121,6 +4128,216 @@ module.exports = function registerRoutes(router, context) {
   const registerAllocationRoutes = require('./allocation/routes');
   registerAllocationRoutes(router, context);
 
+  // ─── Refresh Registry Handlers ───
+
+  async function refreshAllMetrics() {
+    if (DEMO_MODE) return;
+    const roster = deriveRoster();
+    const allMembers = [];
+    for (const org of roster.orgs) {
+      for (const team of Object.values(org.teams)) {
+        allMembers.push(...team.members);
+      }
+    }
+    const members = dedupeMembers(allMembers);
+    const jiraProjectKeys = jiraSyncConfig.getProjectKeys(storage);
+
+    refreshState.running = true;
+    refreshState.scope = 'all';
+    refreshState.startedAt = new Date().toISOString();
+    refreshState.progress = { errors: 0 };
+    refreshState.sources = {
+      jira: { status: 'pending', completed: 0, total: members.length },
+      github: null,
+      gitlab: null
+    };
+
+    async function refreshJiraMembersInner(memberList) {
+      if (DEMO_MODE) return;
+      const CONCURRENCY = 3;
+      let idx = 0;
+      let completed = 0;
+
+      async function nextJira() {
+        if (idx >= memberList.length) return;
+        const member = memberList[idx++];
+        try {
+          completed++;
+          console.log(`[refresh] Jira: ${member.jiraDisplayName} (${completed}/${memberList.length})`);
+          const existingData = readFromStorage(`people/${sanitizeFilename(member.jiraDisplayName)}.json`);
+          const metrics = await fetchPersonMetrics(jiraRequest, member.jiraDisplayName, {
+            nameCache: jiraNameCache,
+            existingData,
+            email: member.email,
+            projectKeys: jiraProjectKeys
+          });
+          if (metrics._resolvedName) delete metrics._resolvedName;
+          writeToStorage(`people/${sanitizeFilename(member.jiraDisplayName)}.json`, metrics);
+          if (refreshState.sources.jira) refreshState.sources.jira.completed++;
+        } catch (err) {
+          console.error(`[refresh] Jira failed for ${member.jiraDisplayName}:`, err.message);
+          refreshState.progress.errors++;
+        }
+        return nextJira();
+      }
+
+      const workers = [];
+      for (let w = 0; w < CONCURRENCY; w++) workers.push(nextJira());
+      await Promise.all(workers);
+      persistNameCache();
+    }
+
+    try {
+      refreshState.sources.jira.status = 'running';
+      await refreshJiraMembersInner(members);
+      refreshState.sources.jira.status = 'done';
+    } catch (err) {
+      refreshState.sources.jira.status = 'error';
+      console.error('[refresh] Jira source error:', err.message);
+    }
+
+    saveLastRefreshed();
+    console.log(`[refresh] all metrics complete (${members.length} members)`);
+    refreshState.running = false;
+  }
+
+  async function refreshAllGithub() {
+    if (DEMO_MODE) return;
+    const roster = deriveRoster();
+    const allMembers = [];
+    for (const org of roster.orgs) {
+      for (const team of Object.values(org.teams)) {
+        allMembers.push(...team.members);
+      }
+    }
+    const members = dedupeMembers(allMembers);
+    const usernames = [...new Set(members.filter(m => m.githubUsername).map(m => m.githubUsername))];
+    if (usernames.length === 0) return;
+    try {
+      const existingCache = readGithubCache().users;
+      const results = await fetchGithubData(usernames, { existingData: existingCache });
+      writeSinglePassResults(results, GITHUB_CACHE_PATH, GITHUB_HISTORY_CACHE_PATH);
+      console.log(`[refresh] GitHub: ${Object.keys(results).length} users processed`);
+    } catch (err) {
+      console.error('[refresh] GitHub failed:', err.message);
+    }
+  }
+
+  async function refreshAllGitlab() {
+    if (DEMO_MODE) return;
+    const roster = deriveRoster();
+    const allMembers = [];
+    for (const org of roster.orgs) {
+      for (const team of Object.values(org.teams)) {
+        allMembers.push(...team.members);
+      }
+    }
+    const members = dedupeMembers(allMembers);
+    const usernames = [...new Set(members.filter(m => m.gitlabUsername).map(m => m.gitlabUsername))];
+    if (usernames.length === 0) return;
+    try {
+      const syncConfig = rosterSyncConfig.loadConfig({ readFromStorage, writeToStorage }) || {};
+      const gitlabInstances = syncConfig.gitlabInstances || [];
+      const results = await fetchGitlabData(usernames, { gitlabInstances });
+      writeSinglePassResults(results, GITLAB_CACHE_PATH, GITLAB_HISTORY_CACHE_PATH);
+      console.log(`[refresh] GitLab: ${Object.keys(results).length} users processed`);
+    } catch (err) {
+      console.error('[refresh] GitLab failed:', err.message);
+    }
+  }
+
+  async function generateAllSnapshots() {
+    const refreshCurrent = true;
+    const roster = deriveRoster();
+    const completedPeriods = snapshots.getCompletedPeriods();
+    const currentPeriod = snapshots.getCurrentPeriod();
+    const periodsToSnapshot = [...completedPeriods];
+    if (currentPeriod) periodsToSnapshot.push(currentPeriod);
+
+    if (periodsToSnapshot.length === 0) return { status: 'no_periods' };
+
+    let generated = 0;
+    let skipped = 0;
+    let refreshed = 0;
+
+    for (const org of roster.orgs) {
+      for (const [teamName, team] of Object.entries(org.teams)) {
+        const teamKey = `${org.key}::${teamName}`;
+        for (const period of periodsToSnapshot) {
+          const path = snapshots.snapshotPath(teamKey, period.end);
+          const existing = readFromStorage(path);
+
+          if (existing && refreshCurrent && currentPeriod && period.monthKey === currentPeriod.monthKey) {
+            const snapshot = snapshots.generateSnapshot(storage, teamKey, team, period);
+            writeToStorage(path, snapshot);
+            refreshed++;
+          } else if (existing) {
+            skipped++;
+          } else {
+            snapshots.generateAndStoreSnapshot(storage, teamKey, team, period);
+            generated++;
+          }
+        }
+      }
+    }
+
+    return { status: 'complete', generated, skipped, refreshed };
+  }
+
+  if (context.registerRefresh) {
+    context.registerRefresh('roster-sync', {
+      order: 10,
+      timeout: 600000,
+      handler: async function() {
+        if (DEMO_MODE) return;
+        await consolidatedSync.runConsolidatedSync(storage);
+      },
+      status: async function() {
+        return { inProgress: consolidatedSync.isSyncInProgress() };
+      }
+    });
+
+    context.registerRefresh('metrics', {
+      order: 20,
+      timeout: 1800000,
+      handler: async function() {
+        await refreshAllMetrics();
+      },
+      status: async function() {
+        return {
+          running: refreshState.running,
+          scope: refreshState.scope,
+          progress: refreshState.progress,
+          sources: refreshState.sources
+        };
+      }
+    });
+
+    context.registerRefresh('github', {
+      order: 30,
+      timeout: 600000,
+      handler: async function() {
+        await refreshAllGithub();
+      }
+    });
+
+    context.registerRefresh('gitlab', {
+      order: 30,
+      timeout: 600000,
+      handler: async function() {
+        await refreshAllGitlab();
+      }
+    });
+
+    context.registerRefresh('snapshots', {
+      order: 80,
+      timeout: 300000,
+      handler: async function() {
+        await generateAllSnapshots();
+      }
+    });
+  }
+
   // ─── Diagnostics Hook ───
 
   if (context.registerDiagnostics) {
@@ -4306,7 +4523,7 @@ module.exports = function registerRoutes(router, context) {
     context.registerMessageProvider('team-tracker:field-completeness', async function(user) {
       // Early bailout: skip all disk I/O for non-managers.
       if (!user.uid) return [];
-      if (user.permissionTier === 'user') return [];
+      if (!user.isAdmin && !user.isTeamAdmin && !user.isManager) return [];
 
       const registry = readFromStorage('team-data/registry.json');
       if (!registry || !registry.people) return [];
@@ -4372,7 +4589,7 @@ module.exports = function registerRoutes(router, context) {
       const verb = (incompletePersonCount + incompleteTeamCount) === 1 ? 'has' : 'have';
 
       // Link admins/team-admins to data quality tab; managers to their dashboard
-      const isAdminLike = user.permissionTier === 'admin' || user.permissionTier === 'team-admin';
+      const isAdminLike = user.isAdmin || user.isTeamAdmin;
       const href = isAdminLike
         ? '#/team-tracker/manage?tab=data-quality'
         : '#/team-tracker/manager-dashboard';

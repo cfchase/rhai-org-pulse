@@ -244,6 +244,7 @@ async function discoverReleasesFromJira(storage, config) {
       releaseNumber: version,
       dueDate: meta.dueDate || null,
       codeFreezeDate: meta.codeFreezeDate || null,
+      featureFreezeDate: meta.featureFreezeDate || null,
       featureCount: featureCounts.get(version) || 0
     })
   }
@@ -302,7 +303,8 @@ async function fetchOpenReleases(storage, config) {
         productName: r.productName || r.product_name || r.product || r.product_shortname || '',
         releaseNumber: r.releaseNumber || r.release_number || r.name || '',
         dueDate: toIsoDate(r.dueDate || r.due_date || r.gaDate || r.ga_date || r.date_finish || r.date_start),
-        codeFreezeDate: toIsoDate(r.codeFreezeDate || r.code_freeze_date || r.codeFreeze || r.code_freeze) || null
+        codeFreezeDate: toIsoDate(r.codeFreezeDate || r.code_freeze_date || r.codeFreeze || r.code_freeze) || null,
+        featureFreezeDate: toIsoDate(r.featureFreezeDate || r.feature_freeze_date || r.featureFreeze || r.feature_freeze) || null
       }))
       .filter(r => r.productName && r.releaseNumber && r.dueDate)
     storage.writeToStorage('releases/delivery/product-pages-releases-cache.json', {
@@ -1037,31 +1039,38 @@ module.exports = function registerRoutes(router, context) {
 
   let refreshState = { running: false, lastResult: null }
 
+  async function runDeliveryRefresh() {
+    if (refreshState.running) return { status: 'already_running' }
+    refreshState = { running: true, startedAt: new Date().toISOString(), lastResult: refreshState.lastResult }
+    try {
+      const config = getConfig(readFromStorage)
+      const result = await runFullAnalysis(storage, config)
+      writeToStorage('releases/delivery/analysis-cache.json', {
+        cachedAt: new Date().toISOString(),
+        data: result
+      })
+      refreshState.lastResult = {
+        status: 'success',
+        message: `Analysis generated with ${result.releases?.length || 0} release(s)`,
+        completedAt: new Date().toISOString()
+      }
+      return refreshState.lastResult
+    } catch (err) {
+      console.error('[releases/delivery] Background refresh failed:', err)
+      refreshState.lastResult = {
+        status: 'error',
+        message: err.message,
+        completedAt: new Date().toISOString()
+      }
+      throw err
+    } finally {
+      refreshState.running = false
+    }
+  }
+
   function triggerBackgroundRefresh() {
     if (refreshState.running) return
-    refreshState = { running: true, startedAt: new Date().toISOString(), lastResult: refreshState.lastResult }
-    const config = getConfig(readFromStorage)
-    runFullAnalysis(storage, config)
-      .then(result => {
-        writeToStorage('releases/delivery/analysis-cache.json', {
-          cachedAt: new Date().toISOString(),
-          data: result
-        })
-        refreshState.lastResult = {
-          status: 'success',
-          message: `Analysis generated with ${result.releases?.length || 0} release(s)`,
-          completedAt: new Date().toISOString()
-        }
-      })
-      .catch(err => {
-        console.error('[releases/delivery] Background refresh failed:', err)
-        refreshState.lastResult = {
-          status: 'error',
-          message: err.message,
-          completedAt: new Date().toISOString()
-        }
-      })
-      .finally(() => { refreshState.running = false })
+    runDeliveryRefresh().catch(function() {})
   }
 
   // --- Config routes ---
@@ -1183,7 +1192,7 @@ module.exports = function registerRoutes(router, context) {
     if (DEMO_MODE) {
       return res.json({ status: 'skipped', message: 'Refresh disabled in demo mode' })
     }
-    if (refreshState.running) {
+    if (refreshState.running || (context.isRefreshRunning && context.isRefreshRunning())) {
       return res.json({ status: 'already_running' })
     }
     logAudit(readFromStorage, writeToStorage, {
@@ -1271,7 +1280,7 @@ module.exports = function registerRoutes(router, context) {
    *       404:
    *         description: No snapshot found for this version/phase
    */
-  router.get('/commitment/:version/:phase', requireAuth, requireScope('releases:read'), function(req, res) {
+  router.get('/commitment/:version/:phase', requireAuth, requireScope('releases:read'), async function(req, res) {
     try {
       const { version, phase } = req.params
 
@@ -1294,28 +1303,55 @@ module.exports = function registerRoutes(router, context) {
         return res.status(404).json({ error: `No snapshot found for ${version} ${phase}. Use the "Create Snapshot" button above.` })
       }
 
-      // Load delivery analysis
-      const analysisCache = readFromStorage('releases/delivery/analysis-cache.json')
-      if (!analysisCache?.data) {
-        return res.status(500).json({ error: 'Delivery analysis data not available' })
-      }
+      // Query Jira directly for current state (independent of delivery analysis cache)
+      const config = getConfig(readFromStorage)
+      const commitmentJql = config.commitmentTrackingJql || 'cf[10855] is not EMPTY'
 
-      // Aggregate ALL releases that match this version (e.g., "3.5" matches "rhoai-3.5", "rhoai-3.5.EA1", "RHAII-3.5", etc.)
+      const projectsFilter = config.jiraAllProjects
+        ? ''
+        : `project in (${config.projectKeys.map(k => `"${k}"`).join(', ')}) AND `
+
+      const jql = `${projectsFilter}issuetype = Feature AND ${commitmentJql} ORDER BY key ASC`
+
+      console.log(`[releases/delivery] Fetching current feature status for commitment tracking comparison`)
+
+      const allFeatures = await fetchAllJqlResults(
+        jiraRequest,
+        jql,
+        'summary,status,components,customfield_10855,customfield_18834',
+        { maxResults: 100 }
+      )
+
+      // Filter to features matching this version
       const escaped = version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const versionPattern = new RegExp(`\\b${escaped}\\b`)
-      const matchingReleases = analysisCache.data.releases.filter(r => versionPattern.test(r.releaseNumber))
 
-      // Collect all issues from matching releases - filter to Features only for commitment tracking
       const deliveryIssues = []
       const seenKeys = new Set()
-      for (const release of matchingReleases) {
-        for (const issue of release.issues || []) {
-          // Deduplicate by key (same issue may appear in multiple releases)
-          // Filter to Features only (commitment tracking is for Features, not Stories/Tasks/Bugs)
-          if (!seenKeys.has(issue.key) && issue.issueType === 'Feature') {
-            deliveryIssues.push(issue)
-            seenKeys.add(issue.key)
-          }
+
+      for (const issue of allFeatures) {
+        const targetVersions = issue.fields?.customfield_10855 || []
+        const hasMatchingVersion = targetVersions.some(v => {
+          const val = v?.name || v?.value || ''
+          return versionPattern.test(val)
+        })
+
+        if (hasMatchingVersion && !seenKeys.has(issue.key)) {
+          const components = (issue.fields?.components || []).map(c => c.name).filter(Boolean)
+          const deliveryOwner = issue.fields?.customfield_18834?.displayName || null
+          const status = issue.fields?.status?.name || 'Unknown'
+          const statusBucket = statusCategoryBucket(issue.fields?.status)
+
+          deliveryIssues.push({
+            key: issue.key,
+            summary: issue.fields?.summary || '',
+            status,
+            statusBucket,
+            components,
+            deliveryOwner,
+            fixVersion: targetVersions[0]?.name || targetVersions[0]?.value || null
+          })
+          seenKeys.add(issue.key)
         }
       }
 
@@ -1417,6 +1453,81 @@ module.exports = function registerRoutes(router, context) {
 
   /**
    * @openapi
+   * /api/modules/releases/delivery/commitment/versions:
+   *   get:
+   *     summary: Get available versions for commitment tracking
+   *     description: Discovers versions from Jira using commitmentTrackingJql (independent of delivery analysis)
+   *     tags: [Releases - Delivery]
+   *     responses:
+   *       200:
+   *         description: List of available versions
+   */
+  router.get('/commitment/versions', requireAuth, requireScope('releases:read'), async function(req, res) {
+    try {
+      const config = getConfig(readFromStorage)
+      const commitmentJql = config.commitmentTrackingJql || 'cf[10855] is not EMPTY'
+
+      // Build project filter
+      const projectsFilter = config.jiraAllProjects
+        ? ''
+        : `project in (${config.projectKeys.map(k => `"${k}"`).join(', ')}) AND `
+
+      // Query Jira for all Features with Target Version
+      const jql = `${projectsFilter}issuetype = Feature AND ${commitmentJql} ORDER BY key ASC`
+
+      console.log(`[releases/delivery] Discovering versions with commitment tracking JQL: ${commitmentJql}`)
+
+      const allFeatures = await fetchAllJqlResults(
+        jiraRequest,
+        jql,
+        'key,customfield_10855',
+        { maxResults: 100 }
+      )
+
+      console.log(`[releases/delivery] Fetched ${allFeatures.length} features from Jira`)
+
+      // Extract unique version numbers (X.Y format)
+      const uniqueVersions = new Set()
+
+      for (const issue of allFeatures) {
+        const targetVersions = issue.fields?.customfield_10855 || []
+
+        for (const v of targetVersions) {
+          // Target Version field returns Jira version objects with 'name' property
+          const val = v?.name || v?.value || ''
+          // Extract X.Y version number
+          const match = val.match(/(\d+\.\d+)/)
+          if (match) {
+            const version = match[1]
+            const [major, minor] = version.split('.').map(Number)
+            // Only include 3.4 and above
+            if (major > 3 || (major === 3 && minor >= 4)) {
+              uniqueVersions.add(version)
+            }
+          }
+        }
+      }
+
+      // Convert to sorted array
+      const versions = Array.from(uniqueVersions)
+        .sort((a, b) => {
+          const [aMajor, aMinor] = a.split('.').map(Number)
+          const [bMajor, bMinor] = b.split('.').map(Number)
+          return aMajor !== bMajor ? aMajor - bMajor : aMinor - bMinor
+        })
+        .map(version => ({ version }))
+
+      console.log(`[releases/delivery] Found ${versions.length} versions for commitment tracking: ${versions.map(v => v.version).join(', ')}`)
+
+      res.json({ versions })
+    } catch (error) {
+      console.error('[releases/delivery] commitment versions discovery error:', error)
+      res.status(500).json({ error: error.message })
+    }
+  })
+
+  /**
+   * @openapi
    * /api/modules/releases/delivery/commitment/snapshot/{version}/{phase}:
    *   post:
    *     summary: Create commitment snapshot by querying Jira directly
@@ -1500,7 +1611,8 @@ module.exports = function registerRoutes(router, context) {
       for (const issue of allFeatures) {
         const targetVersions = issue.fields?.customfield_10855 || []
         const hasMatchingVersion = targetVersions.some(v => {
-          const val = v?.value || ''
+          // Target Version field returns Jira version objects with 'name' property
+          const val = v?.name || v?.value || ''
           return versionPattern.test(val)
         })
 
@@ -1586,7 +1698,8 @@ module.exports = function registerRoutes(router, context) {
         productName: r.productName,
         releaseNumber: r.releaseNumber,
         dueDate: toIsoDate(r.dueDate),
-        codeFreezeDate: toIsoDate(r.codeFreezeDate) || null
+        codeFreezeDate: toIsoDate(r.codeFreezeDate) || null,
+        featureFreezeDate: toIsoDate(r.featureFreezeDate) || null
       })).filter(r => r.productName && r.releaseNumber && r.dueDate)
 
       if (normalized.length === 0) {
@@ -1949,4 +2062,15 @@ module.exports = function registerRoutes(router, context) {
       res.status(500).json({ error: error.message })
     }
   })
+
+  if (context.registerRefresh) {
+    context.registerRefresh('delivery', {
+      order: 70,
+      timeout: 600000,
+      handler: async function() {
+        if (DEMO_MODE) return { status: 'skipped', message: 'Refresh disabled in demo mode' }
+        return runDeliveryRefresh()
+      }
+    })
+  }
 }
