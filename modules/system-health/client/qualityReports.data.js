@@ -130,12 +130,13 @@ import reportRedHatDataServicesModelServingDevops from './generated-reports/qual
 import reportRedHatDataServicesVllmSpyre from './generated-reports/quality-report-red-hat-data-services-vllm-spyre.html?url'
 import reportOpendatahubIoKserveMigration from './generated-reports/quality-report-opendatahub-io-kserve-migration.html?url'
 import reportRedHatDataServicesDataHubPipelines from './generated-reports/quality-report-red-hat-data-services-data-hub-pipelines.html?url'
+import reportPytorchPytorch from './generated-reports/quality-report-pytorch-pytorch.html?url'
 
 export const QUALITY_SAMPLE_META = {
   generatedAt: '2026-05-29 09:01:06',
   averageScore: '5.4/10',
   blurb:
-    'Model Serving + Trusty-AI + AI Pipelines + AI Hub — 127 repositories'
+    'Model Serving + Trusty-AI + AI Pipelines + AI Hub + PyTorch — 128 repositories'
 }
 
 /** @type {Array<{ id: string, label: string, githubUrl: string, score: string, gaps: string, tier: string, component: string, team: string, reportUrl: string }>} */
@@ -244,7 +245,7 @@ export const QUALITY_REPORTS = [
     gaps:
       'No coverage tracking or enforcement, No dedicated SAST/CodeQL workflow',
     tier: 'upstream',
-    component: 'AI Hub',
+    component: 'AI Hub + PyTorch',
     team: 'AI Core Platform',
     reportUrl: reportKubeflowHub
   },
@@ -280,7 +281,7 @@ export const QUALITY_REPORTS = [
     gaps:
       'No coverage threshold enforcement, No CodeQL or SAST analysis on PRs',
     tier: 'midstream',
-    component: 'AI Hub',
+    component: 'AI Hub + PyTorch',
     team: 'AI Core Platform',
     reportUrl: reportOpendatahubIoModelRegistry
   },
@@ -364,7 +365,7 @@ export const QUALITY_REPORTS = [
     gaps:
       'No PR-time Konflux build simulation, No coverage threshold enforcement',
     tier: 'downstream',
-    component: 'AI Hub',
+    component: 'AI Hub + PyTorch',
     team: 'AI Core Platform',
     reportUrl: reportRedHatDataServicesModelRegistry
   },
@@ -388,7 +389,7 @@ export const QUALITY_REPORTS = [
     gaps:
       'No coverage tracking or enforcement, No container vulnerability scanning in CI',
     tier: 'midstream',
-    component: 'AI Hub',
+    component: 'AI Hub + PyTorch',
     team: 'AI Core Platform',
     reportUrl: reportOpendatahubIoModelRegistryOperator
   },
@@ -484,7 +485,7 @@ export const QUALITY_REPORTS = [
     gaps:
       'No coverage tracking or enforcement, No container vulnerability scanning in CI',
     tier: 'downstream',
-    component: 'AI Hub',
+    component: 'AI Hub + PyTorch',
     team: 'AI Core Platform',
     reportUrl: reportRedHatDataServicesModelRegistryOperator
   },
@@ -676,7 +677,7 @@ export const QUALITY_REPORTS = [
     gaps:
       'No CI coverage tracking or enforcement, No container image runtime validation',
     tier: 'downstream',
-    component: 'AI Hub',
+    component: 'AI Hub + PyTorch',
     team: 'AI Core Platform',
     reportUrl: reportRedHatDataServicesModelMetadataCollection
   },
@@ -795,7 +796,7 @@ export const QUALITY_REPORTS = [
     gaps:
       'No container vulnerability scanning, No coverage enforcement thresholds',
     tier: 'downstream',
-    component: 'AI Hub',
+    component: 'AI Hub + PyTorch',
     team: 'AI Core Platform',
     reportUrl: reportRedHatDataServicesModelRegistryBf4Kf
   },
@@ -831,7 +832,7 @@ export const QUALITY_REPORTS = [
     gaps:
       'No coverage enforcement in CI, No security scanning (Trivy, CodeQL, gosec, Dependabot)',
     tier: 'midstream',
-    component: 'AI Hub',
+    component: 'AI Hub + PyTorch',
     team: 'AI Core Platform',
     reportUrl: reportOpendatahubIoModelMetadataCollection
   },
@@ -879,7 +880,7 @@ export const QUALITY_REPORTS = [
     gaps:
       'No security scanning (Trivy, CodeQL, Snyk, SAST), Very low Go unit test coverage (4 test files for 89 source files)',
     tier: 'midstream',
-    component: 'AI Hub',
+    component: 'AI Hub + PyTorch',
     team: 'AI Core Platform',
     reportUrl: reportOpendatahubIoModelRegistryBf4Kf
   },
@@ -1649,6 +1650,18 @@ export const QUALITY_REPORTS = [
     component: 'AI Pipelines',
     team: 'AI Pipelines',
     reportUrl: reportRedHatDataServicesDataHubPipelines
+  },
+  {
+    id: 'pytorch-pytorch',
+    label: 'pytorch/pytorch',
+    githubUrl: 'https://github.com/pytorch/pytorch',
+    score: '8.2/10',
+    gaps:
+      'No PR-level coverage enforcement, Mixed assertEqual/assert_close usage, No .claude/rules/ for test automation',
+    tier: 'upstream',
+    component: 'PyTorch',
+    team: 'PyTorch',
+    reportUrl: reportPytorchPytorch
   },
 ]
 
