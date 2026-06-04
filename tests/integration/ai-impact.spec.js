@@ -207,9 +207,10 @@ test.describe('AI Impact Views @ai-impact', () => {
     const isVisible = await wizardText.isVisible().catch(() => false);
     // In demo mode the wizard should appear since localStorage is fresh
     if (isVisible) {
-      // Verify both mode options are present
-      await expect(page.locator('text=Auto')).toBeVisible();
-      await expect(page.locator('text=Manual')).toBeVisible();
+      // Verify both mode options are present within the wizard dialog
+      const wizard = page.getByRole('dialog');
+      await expect(wizard.getByRole('button', { name: /Auto/ })).toBeVisible();
+      await expect(wizard.getByRole('button', { name: /Manual/ })).toBeVisible();
     }
 
     expect(page.errors).toHaveLength(0);
