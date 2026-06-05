@@ -2592,61 +2592,6 @@ module.exports = function registerRoutes(router, context) {
 
   /**
    * @openapi
-   * /api/modules/team-tracker/teams:
-   *   get:
-   *     tags: ['TT: Sprints']
-   *     summary: Get sprint board team config
-   *     responses:
-   *       200:
-   *         description: Sprint board team configuration
-   */
-  router.get('/teams', requireScope('roster:read'), function(req, res) {
-    try {
-      const data = readFromStorage('teams.json');
-      if (!data) {
-        return res.json({ teams: [] });
-      }
-      res.json(data);
-    } catch (error) {
-      console.error('Read teams error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  /**
-   * @openapi
-   * /api/modules/team-tracker/teams:
-   *   post:
-   *     tags: ['TT: Sprints']
-   *     summary: Save sprint board team config
-   *     requestBody:
-   *       required: true
-   *       content:
-   *         application/json:
-   *           schema:
-   *             type: object
-   *     responses:
-   *       200:
-   *         description: Team config saved
-   *       403:
-   *         description: Forbidden — admin access required
-   */
-  router.post('/teams', requireAdmin, requireScope('roster:write'), function(req, res) {
-    try {
-      const { teams } = req.body;
-      if (!teams || !Array.isArray(teams)) {
-        return res.status(400).json({ error: 'Request must include "teams" array' });
-      }
-      writeToStorage('teams.json', { teams });
-      res.json({ success: true, teams });
-    } catch (error) {
-      console.error('Save teams error:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  /**
-   * @openapi
    * /api/modules/team-tracker/dashboard-summary:
    *   get:
    *     tags: ['TT: Sprints']

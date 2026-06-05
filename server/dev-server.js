@@ -1549,7 +1549,6 @@ if (ttRouter && enabledSlugs.has('team-tracker')) {
     '/api/last-refreshed': '/last-refreshed',
     '/api/refresh': '/refresh',
     '/api/jira-name-cache': '/jira-name-cache',
-    '/api/teams': '/teams',
     '/api/trend': '/trend',
     '/api/admin/roster-sync': '/admin/roster-sync',
     '/api/admin/jira-sync': '/admin/jira-sync',
