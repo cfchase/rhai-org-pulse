@@ -40,7 +40,7 @@ USER 0
 
 WORKDIR /app
 
-# Copy git and tar binaries from build stage
+# Copy git, tar, and gzip binaries from build stage
 COPY --from=build /usr/bin/git /usr/bin/git
 COPY --from=build /usr/libexec/git-core /usr/libexec/git-core
 COPY --from=build /usr/bin/tar /usr/bin/tar
