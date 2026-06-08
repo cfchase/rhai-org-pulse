@@ -244,6 +244,42 @@ describe('computeBlockers', function() {
       expect(result.actionRequired).toBeNull()
     })
   })
+
+  describe('productPath parameter', function() {
+    it('defaults to strat-creator text when productPath is not provided', function() {
+      var feature = { reviewers: {}, humanReviewStatus: 'needs-review' }
+      var result = computeBlockers(feature)
+      expect(result.actionRequired).toContain('strat-creator-needs-attention')
+    })
+
+    it('needs-review with health-pipeline returns generic action text', function() {
+      var feature = { reviewers: {}, humanReviewStatus: 'needs-review' }
+      var result = computeBlockers(feature, 'health-pipeline')
+      expect(result.actionRequired).toBe(
+        'Open the Jira issue, resolve the flagged dimensions, and update the feature status'
+      )
+    })
+
+    it('awaiting-review with health-pipeline returns DoR action text', function() {
+      var feature = { reviewers: {}, humanReviewStatus: 'awaiting-review' }
+      var result = computeBlockers(feature, 'health-pipeline')
+      expect(result.actionRequired).toBe(
+        'Open the Jira issue and verify all Definition of Readiness checks pass'
+      )
+    })
+
+    it('approved with health-pipeline still returns null', function() {
+      var feature = { reviewers: {}, humanReviewStatus: 'approved' }
+      var result = computeBlockers(feature, 'health-pipeline')
+      expect(result.actionRequired).toBeNull()
+    })
+
+    it('null humanReviewStatus with health-pipeline still returns null', function() {
+      var feature = { reviewers: {}, humanReviewStatus: null }
+      var result = computeBlockers(feature, 'health-pipeline')
+      expect(result.actionRequired).toBeNull()
+    })
+  })
 })
 
 // ---------------------------------------------------------------------------

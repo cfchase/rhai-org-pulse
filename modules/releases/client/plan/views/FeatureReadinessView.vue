@@ -15,6 +15,10 @@ const { releases, loadReleases } = useReleases()
 const selectedVersion = ref('')
 
 watch(selectedVersion, function(newVersion) {
+  filters.value = {
+    outcome: null, targetVersion: null, fixVersion: null,
+    component: null, priority: null, team: null, needsAttention: false
+  }
   if (newVersion) loadFeatureReadiness(newVersion)
 })
 

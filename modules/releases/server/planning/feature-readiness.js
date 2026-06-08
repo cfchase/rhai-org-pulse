@@ -37,7 +37,7 @@ function computeBestAvailableScore(feature) {
   return Math.round((weightedSum / totalWeight) * 100)
 }
 
-function computeBlockers(feature) {
+function computeBlockers(feature, productPath) {
   var blockingDimensions = []
   var reviewers = feature.reviewers || {}
   var dims = Object.keys(reviewers)
@@ -53,9 +53,13 @@ function computeBlockers(feature) {
   var actionRequired = null
   var status = feature.humanReviewStatus
   if (status === 'needs-review') {
-    actionRequired = 'Open the Jira issue, add Staff Engineer feedback in the description, then remove the strat-creator-needs-attention label to unblock re-refinement'
+    actionRequired = productPath === 'health-pipeline'
+      ? 'Open the Jira issue, resolve the flagged dimensions, and update the feature status'
+      : 'Open the Jira issue, add Staff Engineer feedback in the description, then remove the strat-creator-needs-attention label to unblock re-refinement'
   } else if (status === 'awaiting-review') {
-    actionRequired = 'Open the Jira issue and add the strat-creator-human-sign-off label when ready'
+    actionRequired = productPath === 'health-pipeline'
+      ? 'Open the Jira issue and verify all Definition of Readiness checks pass'
+      : 'Open the Jira issue and add the strat-creator-human-sign-off label when ready'
   }
 
   return { blockingDimensions: blockingDimensions, actionRequired: actionRequired }
