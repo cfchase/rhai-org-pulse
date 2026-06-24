@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-const { normalizeVersionName, matchVersionsToReleases } = require('../../server/registry');
+const { normalizeVersionName, matchVersionsToReleases, autoResolveFixVersions, REGISTRY_FILE } = require('../../server/registry');
 const { loadRegistryConfig, saveRegistryConfig, STORAGE_KEY } = require('../../server/registry-config');
 
 function createMockStorage(initial = {}) {
@@ -205,5 +205,267 @@ describe('registry-config', () => {
   it('throws on non-object config', () => {
     const storage = createMockStorage();
     expect(() => saveRegistryConfig(storage, null)).toThrow('Config must be an object');
+  });
+});
+
+describe('autoResolveFixVersions', () => {
+  function mockJira(jiraVersions) {
+    return {
+      fetchProjectVersions: async () => jiraVersions,
+      jiraRequest: () => {}
+    };
+  }
+
+  it('populates empty fixVersions from Jira version matches', async () => {
+    const jiraVersions = [
+      { name: 'rhoai-3.5', id: '1', project: 'RHOAIENG' },
+      { name: 'rhoai-3.5.EA1', id: '2', project: 'RHOAIENG' }
+    ];
+
+    const storage = createMockStorage({
+      [REGISTRY_FILE]: {
+        schemaVersion: 1,
+        releases: [
+          { id: 'rhoai-3.5', displayName: 'rhoai-3.5', fixVersions: [], state: 'active' },
+          { id: 'rhoai-3.5.ea1', displayName: 'rhoai-3.5.EA1', fixVersions: [], state: 'active' }
+        ]
+      },
+      [STORAGE_KEY]: { jiraProjects: ['RHOAIENG'] }
+    });
+
+    const result = await autoResolveFixVersions(storage, mockJira(jiraVersions));
+    expect(result.status).toBe('ok');
+    expect(result.resolved).toBe(2);
+
+    const registry = storage._store[REGISTRY_FILE];
+    const ga = registry.releases.find(r => r.id === 'rhoai-3.5');
+    expect(ga.fixVersions).toContain('rhoai-3.5');
+
+    const ea1 = registry.releases.find(r => r.id === 'rhoai-3.5.ea1');
+    expect(ea1.fixVersions).toContain('rhoai-3.5.EA1');
+  });
+
+  it('skips releases that already have fixVersions', async () => {
+    const jiraVersions = [
+      { name: 'rhoai-3.5', id: '1', project: 'RHOAIENG' },
+      { name: 'rhoai-3.6', id: '2', project: 'RHOAIENG' }
+    ];
+
+    const storage = createMockStorage({
+      [REGISTRY_FILE]: {
+        schemaVersion: 1,
+        releases: [
+          { id: 'rhoai-3.5', displayName: 'rhoai-3.5', fixVersions: ['already-mapped'], state: 'active' },
+          { id: 'rhoai-3.6', displayName: 'rhoai-3.6', fixVersions: [], state: 'active' }
+        ]
+      },
+      [STORAGE_KEY]: { jiraProjects: ['RHOAIENG'] }
+    });
+
+    const result = await autoResolveFixVersions(storage, mockJira(jiraVersions));
+    expect(result.status).toBe('ok');
+    expect(result.resolved).toBe(1);
+
+    const registry = storage._store[REGISTRY_FILE];
+    expect(registry.releases.find(r => r.id === 'rhoai-3.5').fixVersions).toEqual(['already-mapped']);
+    expect(registry.releases.find(r => r.id === 'rhoai-3.6').fixVersions).toContain('rhoai-3.6');
+  });
+
+  it('returns skipped when all releases already have fixVersions', async () => {
+    const storage = createMockStorage({
+      [REGISTRY_FILE]: {
+        schemaVersion: 1,
+        releases: [
+          { id: 'rhoai-3.5', displayName: 'rhoai-3.5', fixVersions: ['v1'], state: 'active' }
+        ]
+      }
+    });
+
+    const result = await autoResolveFixVersions(storage);
+    expect(result.status).toBe('skipped');
+  });
+
+  it('returns skipped when Jira returns no versions', async () => {
+    const storage = createMockStorage({
+      [REGISTRY_FILE]: {
+        schemaVersion: 1,
+        releases: [
+          { id: 'rhoai-3.5', displayName: 'rhoai-3.5', fixVersions: [], state: 'active' }
+        ]
+      },
+      [STORAGE_KEY]: { jiraProjects: ['RHOAIENG'] }
+    });
+
+    const result = await autoResolveFixVersions(storage, mockJira([]));
+    expect(result.status).toBe('skipped');
+    expect(result.message).toMatch(/No Jira versions found/);
+  });
+
+  it('ignores archived releases with empty fixVersions', async () => {
+    const storage = createMockStorage({
+      [REGISTRY_FILE]: {
+        schemaVersion: 1,
+        releases: [
+          { id: 'rhoai-3.5', displayName: 'rhoai-3.5', fixVersions: [], state: 'archived' }
+        ]
+      }
+    });
+
+    const result = await autoResolveFixVersions(storage);
+    expect(result.status).toBe('skipped');
+  });
+
+  it('writes audit log when versions are resolved', async () => {
+    const jiraVersions = [
+      { name: 'rhoai-3.5', id: '1', project: 'RHOAIENG' }
+    ];
+
+    const storage = createMockStorage({
+      [REGISTRY_FILE]: {
+        schemaVersion: 1,
+        releases: [
+          { id: 'rhoai-3.5', displayName: 'rhoai-3.5', fixVersions: [], state: 'active' }
+        ]
+      },
+      [STORAGE_KEY]: { jiraProjects: ['RHOAIENG'] }
+    });
+
+    await autoResolveFixVersions(storage, mockJira(jiraVersions));
+
+    // Verify audit log was written
+    const auditKey = 'releases/audit-log.json';
+    const audit = storage._store[auditKey];
+    expect(audit).toBeDefined();
+    const entry = audit.entries.find(e => e.action === 'registry_auto_resolve_versions');
+    expect(entry).toBeDefined();
+    expect(entry.summary).toMatch(/Auto-resolved/);
+  });
+});
+
+describe('migration + auto-resolve pipeline (integration)', () => {
+  const { migrateNormalizedIds } = require('../../server/registry');
+
+  function mockJira(jiraVersions) {
+    return {
+      fetchProjectVersions: async () => jiraVersions,
+      jiraRequest: () => {}
+    };
+  }
+
+  it('migrates .z entries then auto-resolves fixVersions in one pass', async () => {
+    // Simulate the exact production bug: PP sync created both .z (archived, with
+    // fixVersions) and clean (active, empty fixVersions) entries.
+    const jiraVersions = [
+      { name: 'rhoai-3.5', id: '1', project: 'RHOAIENG' },
+      { name: 'rhoai-3.5.EA1', id: '2', project: 'RHOAIENG' },
+      { name: 'rhoai-3.5.EA2', id: '3', project: 'RHOAIENG' }
+    ];
+
+    const storage = createMockStorage({
+      [REGISTRY_FILE]: {
+        schemaVersion: 1,
+        releases: [
+          // .z entries (archived, have fixVersions from previous auto-resolve)
+          { id: 'rhoai-3.5.z', displayName: 'rhoai-3.5.z', fixVersions: ['rhoai-3.5', 'rhoai-3.5.z'], state: 'archived', source: 'product-pages' },
+          { id: 'rhoai-3.5.z.ea1', displayName: 'rhoai-3.5.z.EA1', fixVersions: ['rhoai-3.5.EA1'], state: 'archived', source: 'product-pages' },
+          { id: 'rhoai-3.5.z.ea2', displayName: 'rhoai-3.5.z.EA2', fixVersions: ['rhoai-3.5.EA2'], state: 'archived', source: 'product-pages' },
+          // Clean entries (active, empty fixVersions — the bug)
+          { id: 'rhoai-3.5', displayName: 'rhoai-3.5', fixVersions: [], state: 'active', source: 'product-pages' },
+          { id: 'rhoai-3.5.ea1', displayName: 'rhoai-3.5.EA1', fixVersions: [], state: 'active', source: 'product-pages' },
+          { id: 'rhoai-3.5.ea2', displayName: 'rhoai-3.5.EA2', fixVersions: [], state: 'active', source: 'product-pages' },
+          // Unrelated entry — should be untouched
+          { id: 'rhaii-3.6', displayName: 'RHAII-3.6', fixVersions: ['RHAII-3.6'], state: 'active', source: 'product-pages' }
+        ]
+      },
+      [STORAGE_KEY]: { jiraProjects: ['RHOAIENG'] }
+    });
+
+    // Step 1: Migration merges .z entries into clean entries, carrying fixVersions
+    const registry = storage.readFromStorage(REGISTRY_FILE);
+    const migrated = migrateNormalizedIds(registry);
+    storage.writeToStorage(REGISTRY_FILE, registry);
+
+    expect(migrated).toBe(3); // 3 groups merged
+    expect(registry.releases).toHaveLength(4); // 7 → 4
+
+    // After migration, the GA entry should have fixVersions from the .z entry
+    const gaAfterMigrate = registry.releases.find(r => r.id === 'rhoai-3.5');
+    expect(gaAfterMigrate.state).toBe('active');
+    expect(gaAfterMigrate.fixVersions).toContain('rhoai-3.5');
+    expect(gaAfterMigrate.fixVersions).toContain('rhoai-3.5.z');
+
+    // EA entries should also have fixVersions from their .z counterparts
+    const ea1AfterMigrate = registry.releases.find(r => r.id === 'rhoai-3.5.ea1');
+    expect(ea1AfterMigrate.fixVersions).toContain('rhoai-3.5.EA1');
+
+    // Step 2: Auto-resolve should be a no-op since migration already carried fixVersions
+    const result = await autoResolveFixVersions(storage, mockJira(jiraVersions));
+    expect(result.status).toBe('skipped');
+  });
+
+  it('auto-resolves fixVersions for entries that migration could not populate', async () => {
+    // Scenario: .z entries were deleted (not archived) before migration ran,
+    // so clean entries have no fixVersions source to inherit from.
+    const jiraVersions = [
+      { name: 'rhoai-3.5', id: '1', project: 'RHOAIENG' },
+      { name: 'rhoai-3.5.EA1', id: '2', project: 'RHOAIENG' }
+    ];
+
+    const storage = createMockStorage({
+      [REGISTRY_FILE]: {
+        schemaVersion: 1,
+        releases: [
+          { id: 'rhoai-3.5', displayName: 'rhoai-3.5', fixVersions: [], state: 'active', source: 'product-pages' },
+          { id: 'rhoai-3.5.ea1', displayName: 'rhoai-3.5.EA1', fixVersions: [], state: 'active', source: 'product-pages' }
+        ]
+      },
+      [STORAGE_KEY]: { jiraProjects: ['RHOAIENG'] }
+    });
+
+    // Step 1: Migration is a no-op (IDs already clean)
+    const registry = storage.readFromStorage(REGISTRY_FILE);
+    const migrated = migrateNormalizedIds(registry);
+    storage.writeToStorage(REGISTRY_FILE, registry);
+    expect(migrated).toBe(0);
+
+    // Step 2: Auto-resolve populates fixVersions from Jira
+    const result = await autoResolveFixVersions(storage, mockJira(jiraVersions));
+    expect(result.status).toBe('ok');
+    expect(result.resolved).toBe(2);
+
+    const final = storage.readFromStorage(REGISTRY_FILE);
+    expect(final.releases.find(r => r.id === 'rhoai-3.5').fixVersions).toContain('rhoai-3.5');
+    expect(final.releases.find(r => r.id === 'rhoai-3.5.ea1').fixVersions).toContain('rhoai-3.5.EA1');
+  });
+
+  it('preserves manually-curated fixVersions through the full pipeline', async () => {
+    const jiraVersions = [
+      { name: 'rhoai-3.5', id: '1', project: 'RHOAIENG' }
+    ];
+
+    const storage = createMockStorage({
+      [REGISTRY_FILE]: {
+        schemaVersion: 1,
+        releases: [
+          // .z entry has a manually-added fixVersion
+          { id: 'rhoai-3.5.z', displayName: 'rhoai-3.5.z', fixVersions: ['manual-custom-fv', 'rhoai-3.5'], state: 'archived' },
+          { id: 'rhoai-3.5', displayName: 'rhoai-3.5', fixVersions: [], state: 'active' }
+        ]
+      },
+      [STORAGE_KEY]: { jiraProjects: ['RHOAIENG'] }
+    });
+
+    // Migration should carry the manual fixVersion
+    const registry = storage.readFromStorage(REGISTRY_FILE);
+    migrateNormalizedIds(registry);
+    storage.writeToStorage(REGISTRY_FILE, registry);
+
+    const merged = registry.releases.find(r => r.id === 'rhoai-3.5');
+    expect(merged.fixVersions).toContain('manual-custom-fv');
+    expect(merged.fixVersions).toContain('rhoai-3.5');
+
+    // Auto-resolve should skip since fixVersions are populated
+    const result = await autoResolveFixVersions(storage, mockJira(jiraVersions));
+    expect(result.status).toBe('skipped');
   });
 });
