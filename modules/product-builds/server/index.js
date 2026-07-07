@@ -11,6 +11,8 @@ const {
   getVariants,
   getProductVersions,
   getDefaultProductVersion,
+  getUpstreamPypiUrl,
+  isUpstreamPypiEnabled,
   getCacheStats,
   pMap,
   MAX_CONCURRENT_FETCHES
@@ -728,7 +730,8 @@ module.exports = function registerRoutes(router, context) {
       default_repo_types: DEFAULT_REPO_TYPES,
       product_versions: productVersions,
       default_product_version: defaultProductVersion,
-      package_ui_url: packageUiUrl
+      package_ui_url: packageUiUrl,
+      upstream_pypi_available: isUpstreamPypiEnabled()
     });
   });
 
@@ -765,6 +768,12 @@ module.exports = function registerRoutes(router, context) {
    *         schema:
    *           type: string
    *         description: Repo types to check (repeatable, default test+production)
+   *       - name: expand_upstream
+   *         in: query
+   *         schema:
+   *           type: string
+   *           enum: ['true']
+   *         description: When 'true', also search upstream PyPI for newer versions
    *     responses:
    *       200:
    *         description: Search results with package availability across indexes
@@ -773,6 +782,7 @@ module.exports = function registerRoutes(router, context) {
    */
   router.get('/package-search/search', async function (req, res) {
     const { package_name, package_version, product_version, variant } = req.query;
+    const expandUpstream = req.query.expand_upstream === 'true' && isUpstreamPypiEnabled();
     let repoTypeParam = req.query.repo_type;
 
     if (!package_name || !PACKAGE_NAME_RE.test(package_name)) {
@@ -845,13 +855,24 @@ module.exports = function registerRoutes(router, context) {
       }
     }
 
+    if (expandUpstream) {
+      const upstreamUrl = getUpstreamPypiUrl();
+      tasks.push({
+        productVersion: 'upstream-pypi',
+        variant: 'pypi.org',
+        repoType: 'upstream',
+        indexUrl: upstreamUrl,
+        source: 'upstream'
+      });
+    }
+
     const results = await pMap(tasks, async function (task) {
       try {
         const raw = await fetchIndex(task.indexUrl, package_name);
         let files = [];
         if (raw.found && raw.files) {
           files = raw.files.map(function (f) {
-            return parsePackageFile(f.filename, f.url);
+            return { ...parsePackageFile(f.filename, f.url), uploadTime: f.uploadTime || null };
           });
           if (requestedVersion) {
             files = files.filter(function (f) {
@@ -859,7 +880,7 @@ module.exports = function registerRoutes(router, context) {
             });
           }
         }
-        return {
+        const result = {
           product_version: task.productVersion,
           variant: task.variant,
           repo_type: task.repoType,
@@ -867,8 +888,11 @@ module.exports = function registerRoutes(router, context) {
           index_exists: raw.indexExists,
           found: raw.found,
           files,
-          error: raw.error
+          format: raw.format || null,
+          error: raw.error,
+          source: task.source || 'internal'
         };
+        return result;
       } catch (err) {
         return {
           product_version: task.productVersion,
@@ -878,7 +902,8 @@ module.exports = function registerRoutes(router, context) {
           index_exists: false,
           found: false,
           files: [],
-          error: err.message
+          error: err.message,
+          source: task.source || 'internal'
         };
       }
     }, MAX_CONCURRENT_FETCHES);
