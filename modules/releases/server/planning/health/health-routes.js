@@ -11,10 +11,12 @@
 
 const { getConfig } = require('../config')
 const { CACHE_MAX_AGE_MS, VALID_PHASES } = require('../constants')
-const { runHealthPipeline, loadMilestones, backfillFreezeDatesFromSmartsheet, deriveFreezeDates } = require('./health-pipeline')
+const { runHealthPipeline, loadMilestones, backfillFreezeDatesFromSmartsheet, deriveFreezeDates, derivePlanningStatus } = require('./health-pipeline')
 const { logAudit } = require('../audit-log')
 var { blockDuringImpersonation } = require('../../../../../shared/server/auth')
 var sharedJira = require('../../../../../shared/server/jira')
+var { computeFPDoRReadiness, extractRubricData } = require('../fpdor')
+var { loadFeatureDetail } = require('../cache-reader')
 
 var DATA_PREFIX = 'releases/planning'
 var VERSION_RE = /^[a-zA-Z0-9._-]{1,50}$/
@@ -342,6 +344,18 @@ async function healthRoutes(router, context) {
 
     if (!feature) {
       return res.status(404).json({ error: 'Feature ' + key + ' not found in health data for version ' + version })
+    }
+
+    // Check execution detail for fresher release type and recompute FPDoR if changed
+    var execDetail = await loadFeatureDetail(readFromStorage, key)
+    if (execDetail && execDetail.releaseType) {
+      var cachedReleaseType = feature.releaseType || ''
+      if (execDetail.releaseType !== cachedReleaseType) {
+        feature = Object.assign({}, feature, { releaseType: execDetail.releaseType })
+        var rubricData = extractRubricData(feature)
+        feature.fpdor = computeFPDoRReadiness(feature, rubricData)
+        feature.planningStatus = derivePlanningStatus(feature.fpdor)
+      }
     }
 
     sendJsonWithETag(req, res, feature)
